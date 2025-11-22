@@ -1,10 +1,11 @@
 # 必要なライブラリをインポート
-import json
-import urllib.parse
 import uuid
-import requests
 import streamlit as st
 from streamlit_cognito_auth import CognitoAuthenticator
+
+# AgentCore機能をインポート
+from agentcore.runtime import invoke_agent
+from agentcore.gateway import list_gateway_tools
 
 # Cognito認証の設定
 authenticator = CognitoAuthenticator(
@@ -47,33 +48,18 @@ def main_app():
 
         # エージェントの回答を表示
         with st.chat_message("assistant"):
-            # JWTトークンを取得
-            access_token = authenticator.get_credentials().access_token
-
-            # AgentCore RuntimeのエンドポイントURL構築
-            region = st.secrets["AWS_DEFAULT_REGION"]
-            agent_arn = st.secrets["AGENT_RUNTIME_ARN"]
-            escaped_agent_arn = urllib.parse.quote(agent_arn, safe='')
-            url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{escaped_agent_arn}/invocations?qualifier=DEFAULT"
-
-            # HTTPS POSTリクエスト
-            response = requests.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                    "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": st.session_state.session_id
-                },
-                json={
-                    "prompt": prompt,
-                    "tavily_api_key": st.secrets["TAVILY_API_KEY"]
-                }
+            # AgentCore Runtimeでエージェントを実行
+            response_text = invoke_agent(
+                agent_arn=st.secrets["AGENT_RUNTIME_ARN"],
+                prompt=prompt,
+                access_token=authenticator.get_credentials().access_token,
+                session_id=st.session_state.session_id,
+                gateway_url=st.secrets["GATEWAY_URL"],
+                region=st.secrets["AWS_DEFAULT_REGION"]
             )
 
             # レスポンスを表示
-            result = response.json()
-            full_text = "".join([item["text"] for item in result["result"]["content"] if "text" in item])
-            st.markdown(full_text)
+            st.markdown(response_text)
 
 # メイン処理を実行
 main_app()
