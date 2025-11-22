@@ -5,14 +5,14 @@ FROM --platform=linux/arm64 public.ecr.aws/docker/library/python:3.11-slim
 WORKDIR /app
 
 # 依存関係をコピーしてインストール
-COPY requirements.txt .
+COPY agent/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # agentcoreモジュール（機能別コード）をコピー
-COPY ../agentcore ./agentcore
+COPY agentcore ./agentcore
 
-# アプリケーションコードをコピー
-COPY app.py .
+# アプリケーションコードをコピー（agent/app.pyを明示的に指定）
+COPY agent/app.py .
 
 # ポート8080を公開（AgentCore Runtimeの要件）
 EXPOSE 8080
