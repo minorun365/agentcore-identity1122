@@ -1,3 +1,3 @@
-boto3
-streamlit
-python-dotenv
+streamlit>=1.27.0
+boto3>=1.26.52
+streamlit-cognito-auth>=1.3.1
