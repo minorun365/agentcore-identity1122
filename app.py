@@ -1,5 +1,7 @@
 # 必要なライブラリをインポート
-import boto3, json
+import json
+import urllib.parse
+import requests
 import streamlit as st
 from streamlit_cognito_auth import CognitoAuthenticator
 
@@ -40,55 +42,90 @@ def main_app():
 
         # エージェントの回答を表示
         with st.chat_message("assistant"):
-            # AgentCoreランタイムを呼び出し
-            agentcore = boto3.client('bedrock-agentcore')
+            # JWTトークンを取得
+            credentials = authenticator.get_credentials()
+            if not credentials:
+                st.error("認証トークンが取得できませんでした。再ログインしてください。")
+                st.stop()
+
+            access_token = credentials.access_token
+
+            # AgentCore RuntimeのエンドポイントURL構築
+            region = st.secrets["AWS_DEFAULT_REGION"]
+            agent_arn = st.secrets["AGENT_RUNTIME_ARN"]
+            escaped_agent_arn = urllib.parse.quote(agent_arn, safe='')
+            url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{escaped_agent_arn}/invocations?qualifier=DEFAULT"
+
+            # リクエストヘッダー
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": st.session_state.get("session_id", "default-session")
+            }
+
+            # ペイロード
             payload = json.dumps({
                 "prompt": prompt,
                 "tavily_api_key": st.secrets["TAVILY_API_KEY"]
             })
-            response = agentcore.invoke_agent_runtime(
-                agentRuntimeArn=st.secrets["AGENT_RUNTIME_ARN"],
-                payload=payload.encode()
-            )
+
+            # HTTPS POSTリクエスト（ストリーミング）
+            response = requests.post(url, headers=headers, data=payload, stream=True)
 
             ### ここから下はストリーミングレスポンスの処理 ------------------------------------------
+            # HTTPステータスコードをチェック
+            if response.status_code != 200:
+                st.error(f"エラーが発生しました（ステータスコード: {response.status_code}）")
+                try:
+                    error_data = response.json()
+                    st.error(f"エラー詳細: {json.dumps(error_data, indent=2)}")
+                except:
+                    st.error(f"レスポンス: {response.text}")
+                st.stop()
+
             container = st.container()
             text_holder = container.empty()
             buffer = ""
 
             # レスポンスを1行ずつチェック
-            for line in response["response"].iter_lines():
-                if line and line.decode("utf-8").startswith("data: "):
-                    data = line.decode("utf-8")[6:]
+            for line in response.iter_lines():
+                if line:
+                    line_str = line.decode("utf-8")
+                    if line_str.startswith("data: "):
+                        data = line_str[6:]
 
-                    # 文字列コンテンツの場合は無視
-                    if data.startswith('"') or data.startswith("'"):
-                        continue
+                        # 文字列コンテンツの場合は無視
+                        if data.startswith('"') or data.startswith("'"):
+                            continue
 
-                    # 読み込んだ行をJSONに変換
-                    event = json.loads(data)
+                        # 読み込んだ行をJSONに変換
+                        try:
+                            event = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
 
-                    # ツール利用を検出
-                    if "event" in event and "contentBlockStart" in event["event"]:
-                        if "toolUse" in event["event"]["contentBlockStart"].get("start", {}):
-                            # 現在のテキストを確定
-                            if buffer:
-                                text_holder.markdown(buffer)
-                                buffer = ""
-                            # ツールステータスを表示
-                            container.info("🔍 Tavily検索ツールを利用しています")
-                            text_holder = container.empty()
+                        # ツール利用を検出
+                        if "event" in event and "contentBlockStart" in event["event"]:
+                            if "toolUse" in event["event"]["contentBlockStart"].get("start", {}):
+                                # 現在のテキストを確定
+                                if buffer:
+                                    text_holder.markdown(buffer)
+                                    buffer = ""
+                                # ツールステータスを表示
+                                container.info("🔍 Tavily検索ツールを利用しています")
+                                text_holder = container.empty()
 
-                    # テキストコンテンツを検出
-                    if "data" in event and isinstance(event["data"], str):
-                        buffer += event["data"]
-                        text_holder.markdown(buffer)
-                    elif "event" in event and "contentBlockDelta" in event["event"]:
-                        buffer += event["event"]["contentBlockDelta"]["delta"].get("text", "")
-                        text_holder.markdown(buffer)
+                        # テキストコンテンツを検出
+                        if "data" in event and isinstance(event["data"], str):
+                            buffer += event["data"]
+                            text_holder.markdown(buffer)
+                        elif "event" in event and "contentBlockDelta" in event["event"]:
+                            buffer += event["event"]["contentBlockDelta"]["delta"].get("text", "")
+                            text_holder.markdown(buffer)
 
             # 最後に残ったテキストを表示
-            text_holder.markdown(buffer)
+            if buffer:
+                text_holder.markdown(buffer)
             ### ------------------------------------------------------------------------------
 
 # メイン処理を実行
