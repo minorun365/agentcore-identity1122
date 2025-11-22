@@ -1,13 +1,3 @@
-"""
-AgentCore Memory機能
-会話履歴の管理を担当
-
-学習内容:
-- AgentCore Memory（短期記憶）の設定
-- Strands AgentsとMemoryの統合
-- Session Manager（会話履歴の永続化）
-"""
-
 from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig
 from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
 

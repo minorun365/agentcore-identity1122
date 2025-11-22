@@ -1,19 +1,8 @@
-"""
-AgentCore Runtime用のStrandsエージェント（Gateway統合 + Memory）
-
-学習内容:
-- Strandsエージェントの基本構造
-- Gateway MCPクライアントとの統合
-- OAuth2 Bearer Token認証
-- AgentCore Memory（短期記憶）による会話履歴管理
-"""
-
 from bedrock_agentcore import BedrockAgentCoreApp
 from strands import Agent
-from strands.models import BedrockModel
-from strands.tools.mcp.mcp_client import MCPClient
-from mcp.client.streamable_http import streamablehttp_client
-from agentcore.memory import create_session_manager
+from memory import create_session_manager
+from gateway import create_gateway_client
+from observability import create_trace_attributes
 
 app = BedrockAgentCoreApp()
 
@@ -68,12 +57,7 @@ def invoke(payload):
     )
 
     # MCPクライアントでGatewayに接続
-    mcp_client = MCPClient(
-        lambda: streamablehttp_client(
-            gateway_url,
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-    )
+    mcp_client = create_gateway_client(gateway_url, access_token)
 
     # Gatewayからツールを取得してエージェントを実行
     with mcp_client:
@@ -86,13 +70,13 @@ def invoke(payload):
             tools=tools,
             session_manager=session_manager,  # 会話履歴を保持
             # CloudWatchトレースにカスタム属性を追加
-            trace_attributes={
-                "session.id": session_id,
-                "actor.id": actor_id,
-                "gateway.url": gateway_url,
-                "memory.id": MEMORY_ID,
-                "region": REGION_NAME
-            }
+            trace_attributes=create_trace_attributes(
+                session_id=session_id,
+                actor_id=actor_id,
+                gateway_url=gateway_url,
+                memory_id=MEMORY_ID,
+                region=REGION_NAME
+            )
         )
 
         # エージェント実行

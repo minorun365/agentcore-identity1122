@@ -5,17 +5,14 @@ FROM --platform=linux/arm64 public.ecr.aws/docker/library/python:3.11-slim
 WORKDIR /app
 
 # 依存関係をコピーしてインストール
-COPY agent/requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# agentcoreモジュール（機能別コード）をコピー
-COPY agentcore ./agentcore
-
-# アプリケーションコードをコピー（agent/app.pyを明示的に指定）
-COPY agent/app.py .
+# アプリケーションコードをコピー
+COPY backend/src ./src
 
 # ポート8080を公開（AgentCore Runtimeの要件）
 EXPOSE 8080
 
 # OpenTelemetryで自動計装してアプリケーション起動
-CMD ["opentelemetry-instrument", "python", "app.py"]
+CMD ["opentelemetry-instrument", "python", "-m", "src.main"]

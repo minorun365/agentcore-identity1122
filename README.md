@@ -63,14 +63,15 @@
 ```
 ┌─────────────────┐
 │  Streamlit UI   │
-│   (app.py)      │
+│(frontend/app.py)│
 └────────┬────────┘
          │ HTTP + JWT
          ↓
 ┌─────────────────┐
 │ AgentCore       │
 │ Runtime         │
-│ (agent/app.py)  │
+│(backend/src/    │
+│  main.py)       │
 └────┬─────┬──────┘
      │     │
      │     └──────────────────┐
@@ -206,7 +207,7 @@ aws ecr get-login-password --region us-east-1 --profile sandbox | \
 # プロジェクトルートで実行
 docker buildx build --platform linux/arm64 \
   -t 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest \
-  -f agent/Dockerfile .
+  -f backend/Dockerfile .
 
 docker push 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest
 ```
@@ -214,7 +215,7 @@ docker push 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:late
 **⚠️ 重要:**
 - ARM64アーキテクチャが必須（AgentCore Runtimeの要件）
 - プロジェクトルートからビルドすること
-- Dockerfileは `agent/Dockerfile` を使用
+- Dockerfileは `backend/Dockerfile` を使用
 
 ### ステップ4: AgentCore Runtime を更新
 
@@ -227,7 +228,7 @@ docker push 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:late
 ### ローカルでStreamlitアプリを起動
 
 ```bash
-streamlit run app.py
+streamlit run frontend/app.py
 ```
 
 ブラウザで `http://localhost:8501` を開きます。
@@ -262,19 +263,19 @@ Claude Sonnetが結果を整形して回答
 
 #### 重要な設定ポイント
 
-**1. 依存パッケージ（`agent/requirements.txt`）:**
+**1. 依存パッケージ（`backend/requirements.txt`）:**
 ```txt
 strands-agents[otel]           # Strandsがトレースを生成
 aws-opentelemetry-distro       # トレースをCloudWatchに送信
 ```
 
-**2. Dockerfileの起動コマンド（`agent/Dockerfile`）:**
+**2. Dockerfileの起動コマンド（`backend/Dockerfile`）:**
 ```dockerfile
 # ⚠️ 重要: opentelemetry-instrument で起動すること！
-CMD ["opentelemetry-instrument", "python", "app.py"]
+CMD ["opentelemetry-instrument", "python", "-m", "src.main"]
 ```
 
-**3. カスタム属性（`agent/app.py`）:**
+**3. カスタム属性（`backend/src/main.py`）:**
 ```python
 agent = Agent(
     model="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
@@ -346,15 +347,15 @@ aws xray update-indexing-rule \
 
 #### 1. Docker ビルドが失敗する
 
-**症状:** `no such file or directory: agent/requirements.txt`
+**症状:** `no such file or directory: backend/requirements.txt`
 
 **解決策:** プロジェクトルートからビルドしてください
 ```bash
 # ❌ 間違い
-cd agent && docker build -f Dockerfile .
+cd backend && docker build -f Dockerfile .
 
 # ✅ 正しい
-docker buildx build -f agent/Dockerfile .
+docker buildx build -f backend/Dockerfile .
 ```
 
 #### 2. ECR push が失敗する
@@ -406,7 +407,7 @@ docker buildx build --platform linux/arm64 ...
 #### 2. カスタム属性が表示されない
 
 **確認事項:**
-- `agent/app.py` で `trace_attributes` が設定されているか確認
+- `backend/src/main.py` で `trace_attributes` が設定されているか確認
 - Runtime に最新イメージがデプロイされているか確認
 
 ---
@@ -417,17 +418,20 @@ docker buildx build --platform linux/arm64 ...
 agentcore-identity1122/
 ├── README.md                      # このファイル
 ├── OBSERVABILITY.md               # Observability詳細ガイド
-├── app.py                         # Streamlit フロントエンド
-├── requirements.txt               # Streamlit用依存パッケージ
-├── .streamlit/
-│   └── secrets.toml              # Streamlit設定（gitignore）
-├── agent/
-│   ├── app.py                    # AgentCore Runtime エージェント
-│   ├── requirements.txt          # エージェント用依存パッケージ
-│   └── Dockerfile                # コンテナイメージ定義
-└── agentcore/
-    ├── memory.py                 # Memory統合ヘルパー
-    └── runtime.py                # Runtime呼び出しヘルパー
+├── frontend/
+│   ├── app.py                    # Streamlit フロントエンド
+│   ├── requirements.txt          # Streamlit用依存パッケージ
+│   └── runtime.py                # Runtime呼び出しヘルパー
+├── backend/
+│   ├── src/                      # アプリケーションコード
+│   │   ├── main.py               # エージェントメイン
+│   │   ├── memory.py             # Memory統合
+│   │   ├── gateway.py            # Gateway統合
+│   │   └── observability.py      # Observability設定
+│   ├── Dockerfile                # コンテナイメージ定義
+│   └── requirements.txt          # 依存パッケージ
+└── .streamlit/
+    └── secrets.toml              # Streamlit設定（gitignore）
 ```
 
 ---
