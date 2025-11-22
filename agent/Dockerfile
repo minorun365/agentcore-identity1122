@@ -17,5 +17,5 @@ COPY agent/app.py .
 # ポート8080を公開（AgentCore Runtimeの要件）
 EXPOSE 8080
 
-# アプリケーション起動
-CMD ["python", "app.py"]
+# OpenTelemetryで自動計装してアプリケーション起動
+CMD ["opentelemetry-instrument", "python", "app.py"]
