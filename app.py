@@ -91,11 +91,18 @@ def main_app():
             container = st.container()
             text_holder = container.empty()
             buffer = ""
+            debug_lines = []  # デバッグ用
+
+            # レスポンスのContent-Typeを確認
+            content_type = response.headers.get('content-type', '')
+            st.info(f"Content-Type: {content_type}")
 
             # レスポンスを1行ずつチェック
             for line in response.iter_lines():
                 if line:
                     line_str = line.decode("utf-8")
+                    debug_lines.append(line_str[:100])  # デバッグ用：最初の100文字を保存
+
                     if line_str.startswith("data: "):
                         data = line_str[6:]
 
@@ -106,7 +113,9 @@ def main_app():
                         # 読み込んだ行をJSONに変換
                         try:
                             event = json.loads(data)
-                        except json.JSONDecodeError:
+                            st.write(f"DEBUG - Event keys: {list(event.keys())}")  # デバッグ
+                        except json.JSONDecodeError as e:
+                            st.warning(f"JSON decode error: {e}, data: {data[:100]}")
                             continue
 
                         # ツール利用を検出
@@ -128,9 +137,16 @@ def main_app():
                             buffer += event["event"]["contentBlockDelta"]["delta"].get("text", "")
                             text_holder.markdown(buffer)
 
+            # デバッグ情報を表示
+            with st.expander("デバッグ情報（最初の10行）"):
+                for i, line in enumerate(debug_lines[:10]):
+                    st.text(f"{i}: {line}")
+
             # 最後に残ったテキストを表示
             if buffer:
                 text_holder.markdown(buffer)
+            else:
+                st.warning("バッファが空です。レスポンスが正しく解析されていない可能性があります。")
             ### ------------------------------------------------------------------------------
 
 # メイン処理を実行
