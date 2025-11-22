@@ -61,10 +61,11 @@ def main_app():
             escaped_agent_arn = urllib.parse.quote(agent_arn, safe='')
             url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{escaped_agent_arn}/invocations?qualifier=DEFAULT"
 
-            # リクエストヘッダー
+            # リクエストヘッダー（ストリーミングを要求）
             headers = {
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
+                "Accept": "text/event-stream",  # ストリーミングレスポンスを要求
                 "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": st.session_state.session_id
             }
 
@@ -88,65 +89,81 @@ def main_app():
                     st.error(f"レスポンス: {response.text}")
                 st.stop()
 
-            container = st.container()
-            text_holder = container.empty()
-            buffer = ""
-            debug_lines = []  # デバッグ用
-
             # レスポンスのContent-Typeを確認
             content_type = response.headers.get('content-type', '')
-            st.info(f"Content-Type: {content_type}")
 
-            # レスポンスを1行ずつチェック
-            for line in response.iter_lines():
-                if line:
-                    line_str = line.decode("utf-8")
-                    debug_lines.append(line_str[:100])  # デバッグ用：最初の100文字を保存
+            # Content-Typeに応じて処理を分岐
+            if 'text/event-stream' in content_type:
+                # ストリーミングレスポンス（SSE形式）
+                container = st.container()
+                text_holder = container.empty()
+                buffer = ""
 
-                    if line_str.startswith("data: "):
-                        data = line_str[6:]
+                # レスポンスを1行ずつチェック
+                for line in response.iter_lines():
+                    if line:
+                        line_str = line.decode("utf-8")
 
-                        # 文字列コンテンツの場合は無視
-                        if data.startswith('"') or data.startswith("'"):
-                            continue
+                        if line_str.startswith("data: "):
+                            data = line_str[6:]
 
-                        # 読み込んだ行をJSONに変換
-                        try:
-                            event = json.loads(data)
-                            st.write(f"DEBUG - Event keys: {list(event.keys())}")  # デバッグ
-                        except json.JSONDecodeError as e:
-                            st.warning(f"JSON decode error: {e}, data: {data[:100]}")
-                            continue
+                            # 読み込んだ行をJSONに変換
+                            try:
+                                event = json.loads(data)
+                            except json.JSONDecodeError:
+                                continue
 
-                        # ツール利用を検出
-                        if "event" in event and "contentBlockStart" in event["event"]:
-                            if "toolUse" in event["event"]["contentBlockStart"].get("start", {}):
-                                # 現在のテキストを確定
-                                if buffer:
+                            # テキストコンテンツを検出（イベントの構造を確認）
+                            if isinstance(event, dict):
+                                # パターン1: {"event": "text content"}
+                                if "event" in event:
+                                    if isinstance(event["event"], str):
+                                        buffer += event["event"]
+                                        text_holder.markdown(buffer)
+                                    # パターン2: {"event": {"contentBlockDelta": {"delta": {"text": "..."}}}}
+                                    elif isinstance(event["event"], dict) and "contentBlockDelta" in event["event"]:
+                                        delta_text = event["event"]["contentBlockDelta"].get("delta", {}).get("text", "")
+                                        buffer += delta_text
+                                        text_holder.markdown(buffer)
+                                # パターン3: {"data": "text content"}
+                                elif "data" in event and isinstance(event["data"], str):
+                                    buffer += event["data"]
                                     text_holder.markdown(buffer)
-                                    buffer = ""
-                                # ツールステータスを表示
-                                container.info("🔍 Tavily検索ツールを利用しています")
-                                text_holder = container.empty()
+                                # パターン4: {"text": "text content"}
+                                elif "text" in event and isinstance(event["text"], str):
+                                    buffer += event["text"]
+                                    text_holder.markdown(buffer)
 
-                        # テキストコンテンツを検出
-                        if "data" in event and isinstance(event["data"], str):
-                            buffer += event["data"]
-                            text_holder.markdown(buffer)
-                        elif "event" in event and "contentBlockDelta" in event["event"]:
-                            buffer += event["event"]["contentBlockDelta"]["delta"].get("text", "")
-                            text_holder.markdown(buffer)
+                # 最後に残ったテキストを表示
+                if buffer:
+                    text_holder.markdown(buffer)
 
-            # デバッグ情報を表示
-            with st.expander("デバッグ情報（最初の10行）"):
-                for i, line in enumerate(debug_lines[:10]):
-                    st.text(f"{i}: {line}")
+            elif 'application/json' in content_type:
+                # 通常のJSONレスポンス（フォールバック）
+                try:
+                    result = response.json()
 
-            # 最後に残ったテキストを表示
-            if buffer:
-                text_holder.markdown(buffer)
+                    # result.content[].text からテキストを抽出
+                    if "result" in result and "content" in result["result"]:
+                        full_text = ""
+                        for content_item in result["result"]["content"]:
+                            if "text" in content_item:
+                                full_text += content_item["text"]
+
+                        if full_text:
+                            st.markdown(full_text)
+                        else:
+                            st.warning("テキストコンテンツが見つかりませんでした。")
+                    else:
+                        st.warning("想定外のレスポンス形式です。")
+                        st.json(result)
+
+                except Exception as e:
+                    st.error(f"JSONパースエラー: {e}")
+
             else:
-                st.warning("バッファが空です。レスポンスが正しく解析されていない可能性があります。")
+                st.error(f"サポートされていないContent-Type: {content_type}")
+                st.text(response.text[:500])
             ### ------------------------------------------------------------------------------
 
 # メイン処理を実行
