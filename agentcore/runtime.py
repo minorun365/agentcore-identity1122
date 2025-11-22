@@ -54,6 +54,12 @@ def invoke_agent(
 
     # レスポンス解析
     result = response.json()
+
+    # エラーハンドリング：レスポンスにresultキーがない場合
+    if "result" not in result:
+        error_message = f"エラーレスポンス: {json.dumps(result, indent=2, ensure_ascii=False)}"
+        raise Exception(error_message)
+
     full_text = "".join([
         item["text"]
         for item in result["result"]["content"]
