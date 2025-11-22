@@ -5,7 +5,6 @@ from streamlit_cognito_auth import CognitoAuthenticator
 
 # AgentCore機能をインポート
 from agentcore.runtime import invoke_agent
-from agentcore.gateway import list_gateway_tools
 
 # Cognito認証の設定
 authenticator = CognitoAuthenticator(
