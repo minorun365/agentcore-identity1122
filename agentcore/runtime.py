@@ -1,8 +1,3 @@
-"""
-AgentCore Runtime機能
-エージェントの実行とレスポンス処理を担当
-"""
-
 import json
 import urllib.parse
 import requests
@@ -13,6 +8,7 @@ def invoke_agent(
     prompt: str,
     access_token: str,
     session_id: str,
+    actor_id: str,
     gateway_url: str,
     region: str = "us-east-1",
     **kwargs
@@ -25,6 +21,7 @@ def invoke_agent(
         prompt: ユーザーのプロンプト
         access_token: JWTアクセストークン（Cognito）
         session_id: セッションID（会話の継続性を保つ）
+        actor_id: アクターID（ユーザー識別子、通常はCognitoのusername）
         gateway_url: Gateway MCP URL（Runtime内でGateway接続に使用）
         region: AWSリージョン
         **kwargs: その他のペイロード
@@ -49,6 +46,8 @@ def invoke_agent(
             "prompt": prompt,
             "access_token": access_token,
             "gateway_url": gateway_url,
+            "session_id": session_id,
+            "actor_id": actor_id,
             **kwargs
         }
     )

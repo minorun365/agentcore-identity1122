@@ -53,6 +53,7 @@ def main_app():
                 prompt=prompt,
                 access_token=authenticator.get_credentials().access_token,
                 session_id=st.session_state.session_id,
+                actor_id=username,  # Cognitoのusernameを使用
                 gateway_url=st.secrets["GATEWAY_URL"],
                 region=st.secrets["AWS_DEFAULT_REGION"]
             )
