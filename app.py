@@ -1,6 +1,7 @@
 # 必要なライブラリをインポート
 import json
 import urllib.parse
+import uuid
 import requests
 import streamlit as st
 from streamlit_cognito_auth import CognitoAuthenticator
@@ -22,6 +23,10 @@ if not is_logged_in:
 # ログイン成功後のメインアプリケーション
 def main_app():
     """メインアプリケーション"""
+    # セッションIDを初期化（UUIDを使用して33文字以上を保証）
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+
     # ヘッダー部分（ユーザー名とログアウトボタン）
     col1, col2 = st.columns([4, 1])
     with col1:
@@ -60,7 +65,7 @@ def main_app():
             headers = {
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
-                "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": st.session_state.get("session_id", "default-session")
+                "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": st.session_state.session_id
             }
 
             # ペイロード
