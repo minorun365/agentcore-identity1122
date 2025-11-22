@@ -1,8 +1,8 @@
 from bedrock_agentcore import BedrockAgentCoreApp
 from strands import Agent
-from memory import create_session_manager
-from gateway import create_gateway_client
-from observability import create_trace_attributes
+from .memory import create_session_manager
+from .gateway import create_gateway_client
+from .observability import create_trace_attributes
 
 app = BedrockAgentCoreApp()
 
