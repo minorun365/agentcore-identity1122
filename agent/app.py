@@ -84,7 +84,15 @@ def invoke(payload):
         agent = Agent(
             model="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
             tools=tools,
-            session_manager=session_manager  # 会話履歴を保持
+            session_manager=session_manager,  # 会話履歴を保持
+            # CloudWatchトレースにカスタム属性を追加
+            trace_attributes={
+                "session.id": session_id,
+                "actor.id": actor_id,
+                "gateway.url": gateway_url,
+                "memory.id": MEMORY_ID,
+                "region": REGION_NAME
+            }
         )
 
         # エージェント実行
