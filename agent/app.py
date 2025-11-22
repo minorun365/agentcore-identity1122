@@ -54,20 +54,31 @@ def invoke(payload):
         tools = mcp_client.list_tools_sync()
 
         # Strandsエージェントを作成
-        model = BedrockModel(
-            inference_profile_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
-            temperature=0.0,
-            streaming=True
+        agent = Agent(
+            model="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            tools=tools
         )
-        agent = Agent(model=model, tools=tools)
 
         # エージェント実行
         result = agent(user_message)
 
+        # result.messageからテキストを抽出
+        # Strandsエージェントはresult.messageが辞書形式 {'role': 'assistant', 'content': [{'text': '...'}]}
+        if isinstance(result.message, dict) and 'content' in result.message:
+            # content配列からtextを抽出
+            text_content = "".join([
+                item.get('text', '')
+                for item in result.message['content']
+                if isinstance(item, dict) and 'text' in item
+            ])
+        else:
+            # フォールバック: 文字列として扱う
+            text_content = str(result.message)
+
         return {
             "result": {
                 "content": [{
-                    "text": str(result.message)
+                    "text": text_content
                 }]
             }
         }
