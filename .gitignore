@@ -1,5 +1,5 @@
 # Streamlit secrets (IMPORTANT: Never commit this!)
-.streamlit/secrets.toml
+frontend/.streamlit
 
 # Python
 __pycache__/
@@ -24,3 +24,7 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# その他
+.claude
+logs

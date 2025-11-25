@@ -53,37 +53,38 @@ def invoke_agent_stream(
         stream=True
     )
 
-    # デバッグ: HTTPレスポンスステータスを確認
-    print(f"[DEBUG] HTTP Status: {response.status_code}")
-    print(f"[DEBUG] Headers: {dict(response.headers)}")
+    # デバッグ: HTTPステータスとヘッダー
+    yield {"type": "debug", "message": f"HTTP {response.status_code}, Content-Type: {response.headers.get('Content-Type', 'N/A')}"}
+
+    # HTTPエラーチェック
+    if response.status_code != 200:
+        yield {"type": "error", "message": f"HTTP {response.status_code}: {response.text[:500]}"}
+        return
 
     # レスポンスを1行ずつ処理
     line_count = 0
     for line in response.iter_lines():
         line_count += 1
-        print(f"[DEBUG] Line {line_count}: {line[:200] if line else 'empty'}")
+        # 最初の5行をデバッグ出力
+        if line_count <= 5:
+            yield {"type": "debug", "message": f"Line {line_count}: {str(line)[:150]}"}
 
         if not line:
             continue
 
         decoded_line = line.decode("utf-8")
-        print(f"[DEBUG] Decoded: {decoded_line[:200]}")
 
         if not decoded_line.startswith("data: "):
-            print(f"[DEBUG] Skipping (no 'data: ' prefix)")
             continue
 
         data = decoded_line[6:]
-        print(f"[DEBUG] Data payload: {data[:200]}")
 
         # 文字列コンテンツの場合は無視
         if data.startswith('"') or data.startswith("'"):
-            print(f"[DEBUG] Skipping (string content)")
             continue
 
         try:
             event = json.loads(data)
-            print(f"[DEBUG] Parsed event: {event}")
 
             # ツール利用を検出
             if "event" in event and "contentBlockStart" in event["event"]:

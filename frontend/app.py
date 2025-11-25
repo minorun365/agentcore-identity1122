@@ -52,10 +52,7 @@ def main_app():
             text_holder = container.empty()
             buffer = ""
 
-            print(f"[DEBUG app.py] Starting stream request...")
-            print(f"[DEBUG app.py] agent_arn: {st.secrets['AGENT_RUNTIME_ARN']}")
-            print(f"[DEBUG app.py] session_id: {st.session_state.session_id}")
-            print(f"[DEBUG app.py] username: {username}")
+            st.info("ストリーミングリクエスト開始...")
 
             # AgentCore Runtimeでエージェントを実行（ストリーミング）
             event_count = 0
@@ -69,9 +66,16 @@ def main_app():
                 region=st.secrets["AWS_DEFAULT_REGION"]
             ):
                 event_count += 1
-                print(f"[DEBUG app.py] Event {event_count}: {event}")
+                st.toast(f"イベント {event_count}: {event['type']}")
 
-                if event["type"] == "tool_use":
+                if event["type"] == "debug":
+                    st.warning(f"DEBUG: {event.get('message', '')}")
+
+                elif event["type"] == "error":
+                    st.error(f"エラー: {event.get('message', 'Unknown error')}")
+                    break
+
+                elif event["type"] == "tool_use":
                     # 現在のテキストを確定
                     if buffer:
                         text_holder.markdown(buffer)
@@ -86,7 +90,7 @@ def main_app():
                     text_holder.markdown(buffer)
 
             # 最後に残ったテキストを表示
-            print(f"[DEBUG app.py] Stream ended. Total events: {event_count}, buffer length: {len(buffer)}")
+            st.success(f"ストリーム終了: イベント数={event_count}, バッファ長={len(buffer)}")
             text_holder.markdown(buffer)
 
 # メイン処理を実行
