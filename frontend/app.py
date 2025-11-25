@@ -4,7 +4,7 @@ import streamlit as st
 from streamlit_cognito_auth import CognitoAuthenticator
 
 # AgentCore機能をインポート
-from runtime import invoke_agent
+from runtime import invoke_agent_stream
 
 # Cognito認証の設定
 authenticator = CognitoAuthenticator(
@@ -47,8 +47,13 @@ def main_app():
 
         # エージェントの回答を表示
         with st.chat_message("assistant"):
-            # AgentCore Runtimeでエージェントを実行
-            response_text = invoke_agent(
+            # ストリーミング用のコンテナを準備
+            container = st.container()
+            text_holder = container.empty()
+            buffer = ""
+
+            # AgentCore Runtimeでエージェントを実行（ストリーミング）
+            for event in invoke_agent_stream(
                 agent_arn=st.secrets["AGENT_RUNTIME_ARN"],
                 prompt=prompt,
                 access_token=authenticator.get_credentials().access_token,
@@ -56,10 +61,23 @@ def main_app():
                 actor_id=username,  # Cognitoのusernameを使用
                 gateway_url=st.secrets["GATEWAY_URL"],
                 region=st.secrets["AWS_DEFAULT_REGION"]
-            )
+            ):
+                if event["type"] == "tool_use":
+                    # 現在のテキストを確定
+                    if buffer:
+                        text_holder.markdown(buffer)
+                        buffer = ""
+                    # ツールステータスを表示
+                    tool_name = event.get("tool_name", "unknown")
+                    container.info(f"🔍 {tool_name} ツールを利用しています")
+                    text_holder = container.empty()
 
-            # レスポンスを表示
-            st.markdown(response_text)
+                elif event["type"] == "text":
+                    buffer += event["text"]
+                    text_holder.markdown(buffer)
+
+            # 最後に残ったテキストを表示
+            text_holder.markdown(buffer)
 
 # メイン処理を実行
 main_app()
