@@ -52,7 +52,13 @@ def main_app():
             text_holder = container.empty()
             buffer = ""
 
+            print(f"[DEBUG app.py] Starting stream request...")
+            print(f"[DEBUG app.py] agent_arn: {st.secrets['AGENT_RUNTIME_ARN']}")
+            print(f"[DEBUG app.py] session_id: {st.session_state.session_id}")
+            print(f"[DEBUG app.py] username: {username}")
+
             # AgentCore Runtimeでエージェントを実行（ストリーミング）
+            event_count = 0
             for event in invoke_agent_stream(
                 agent_arn=st.secrets["AGENT_RUNTIME_ARN"],
                 prompt=prompt,
@@ -62,6 +68,9 @@ def main_app():
                 gateway_url=st.secrets["GATEWAY_URL"],
                 region=st.secrets["AWS_DEFAULT_REGION"]
             ):
+                event_count += 1
+                print(f"[DEBUG app.py] Event {event_count}: {event}")
+
                 if event["type"] == "tool_use":
                     # 現在のテキストを確定
                     if buffer:
@@ -77,6 +86,7 @@ def main_app():
                     text_holder.markdown(buffer)
 
             # 最後に残ったテキストを表示
+            print(f"[DEBUG app.py] Stream ended. Total events: {event_count}, buffer length: {len(buffer)}")
             text_holder.markdown(buffer)
 
 # メイン処理を実行
