@@ -24,7 +24,3 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
-
-# その他
-.claude
-logs

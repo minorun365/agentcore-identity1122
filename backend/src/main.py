@@ -56,7 +56,7 @@ async def invoke(payload):
 
         # Strandsエージェント作成（SessionManagerで会話履歴を管理）
         agent = Agent(
-            model="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            model="us.anthropic.claude-haiku-4-5-20251001-v1:0",
             tools=tools,
             session_manager=session_manager,  # 会話履歴を保持
             # CloudWatchトレースにカスタム属性を追加
