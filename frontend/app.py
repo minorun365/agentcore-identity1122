@@ -4,7 +4,7 @@ import streamlit as st
 from streamlit_cognito_auth import CognitoAuthenticator
 
 # AgentCoreランタイム呼び出しモジュールをインポート
-from .runtime import invoke_agent_stream
+from runtime import invoke_agent_stream
 
 # Cognito認証の設定
 authenticator = CognitoAuthenticator(
