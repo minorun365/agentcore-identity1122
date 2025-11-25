@@ -53,27 +53,17 @@ def invoke_agent_stream(
         stream=True
     )
 
-    # デバッグ: HTTPステータスとヘッダー
-    yield {"type": "debug", "message": f"HTTP {response.status_code}, Content-Type: {response.headers.get('Content-Type', 'N/A')}"}
-
     # HTTPエラーチェック
     if response.status_code != 200:
         yield {"type": "error", "message": f"HTTP {response.status_code}: {response.text[:500]}"}
         return
 
-    # レスポンスを1行ずつ処理
-    line_count = 0
+    # ストリーミングレスポンスを1行ずつ処理
     for line in response.iter_lines():
-        line_count += 1
-        # 最初の5行をデバッグ出力
-        if line_count <= 5:
-            yield {"type": "debug", "message": f"Line {line_count}: {str(line)[:150]}"}
-
         if not line:
             continue
 
         decoded_line = line.decode("utf-8")
-
         if not decoded_line.startswith("data: "):
             continue
 
@@ -102,69 +92,3 @@ def invoke_agent_stream(
 
         except json.JSONDecodeError:
             continue
-
-
-def invoke_agent(
-    agent_arn: str,
-    prompt: str,
-    access_token: str,
-    session_id: str,
-    actor_id: str,
-    gateway_url: str,
-    region: str = "us-east-1",
-    **kwargs
-) -> str:
-    """
-    AgentCore Runtimeでエージェントを実行する
-
-    Args:
-        agent_arn: AgentCore RuntimeのARN
-        prompt: ユーザーのプロンプト
-        access_token: JWTアクセストークン（Cognito）
-        session_id: セッションID（会話の継続性を保つ）
-        actor_id: アクターID（ユーザー識別子、通常はCognitoのusername）
-        gateway_url: Gateway MCP URL（Runtime内でGateway接続に使用）
-        region: AWSリージョン
-        **kwargs: その他のペイロード
-
-    Returns:
-        str: エージェントからのレスポンステキスト
-    """
-    # エンドポイントURL構築
-    escaped_agent_arn = urllib.parse.quote(agent_arn, safe='')
-    url = f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{escaped_agent_arn}/invocations?qualifier=DEFAULT"
-
-    # リクエスト送信
-    # Runtime内でGatewayに接続するため、access_tokenとgateway_urlをpayloadに含める
-    response = requests.post(
-        url,
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-            "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id
-        },
-        json={
-            "prompt": prompt,
-            "access_token": access_token,
-            "gateway_url": gateway_url,
-            "session_id": session_id,
-            "actor_id": actor_id,
-            **kwargs
-        }
-    )
-
-    # レスポンス解析
-    result = response.json()
-
-    # エラーハンドリング：レスポンスにresultキーがない場合
-    if "result" not in result:
-        error_message = f"エラーレスポンス: {json.dumps(result, indent=2, ensure_ascii=False)}"
-        raise Exception(error_message)
-
-    full_text = "".join([
-        item["text"]
-        for item in result["result"]["content"]
-        if "text" in item
-    ])
-
-    return full_text

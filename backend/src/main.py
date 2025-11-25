@@ -11,9 +11,9 @@ MEMORY_ID = "identity1122-chChJ7CEmJ"
 REGION_NAME = "us-east-1"
 
 @app.entrypoint
-def invoke(payload):
+async def invoke(payload):
     """
-    Gateway統合 + Memory対応のAIエージェント
+    Gateway統合 + Memory対応のAIエージェント（ストリーミング対応）
 
     Args:
         payload: {
@@ -31,22 +31,12 @@ def invoke(payload):
     actor_id = payload.get("actor_id")
 
     if not access_token or not gateway_url:
-        return {
-            "result": {
-                "content": [{
-                    "text": "エラー: access_tokenまたはgateway_urlが指定されていません"
-                }]
-            }
-        }
+        yield "エラー: access_tokenまたはgateway_urlが指定されていません"
+        return
 
     if not session_id or not actor_id:
-        return {
-            "result": {
-                "content": [{
-                    "text": "エラー: session_idまたはactor_idが指定されていません"
-                }]
-            }
-        }
+        yield "エラー: session_idまたはactor_idが指定されていません"
+        return
 
     # AgentCore MemoryのSessionManagerを作成
     session_manager = create_session_manager(
@@ -79,28 +69,10 @@ def invoke(payload):
             )
         )
 
-        # エージェント実行
-        result = agent(user_message)
-
-        # result.messageからテキストを抽出
-        if isinstance(result.message, dict) and 'content' in result.message:
-            # content配列からtextを抽出
-            text_content = "".join([
-                item.get('text', '')
-                for item in result.message['content']
-                if isinstance(item, dict) and 'text' in item
-            ])
-        else:
-            # フォールバック: 文字列として扱う
-            text_content = str(result.message)
-
-        return {
-            "result": {
-                "content": [{
-                    "text": text_content
-                }]
-            }
-        }
+        # ストリーミングでエージェント実行
+        stream = agent.stream_async(user_message)
+        async for event in stream:
+            yield event
 
 if __name__ == "__main__":
     app.run()

@@ -47,31 +47,21 @@ def main_app():
 
         # エージェントの回答を表示
         with st.chat_message("assistant"):
-            # ストリーミング用のコンテナを準備
             container = st.container()
             text_holder = container.empty()
             buffer = ""
 
-            st.info("ストリーミングリクエスト開始...")
-
             # AgentCore Runtimeでエージェントを実行（ストリーミング）
-            event_count = 0
             for event in invoke_agent_stream(
                 agent_arn=st.secrets["AGENT_RUNTIME_ARN"],
                 prompt=prompt,
                 access_token=authenticator.get_credentials().access_token,
                 session_id=st.session_state.session_id,
-                actor_id=username,  # Cognitoのusernameを使用
+                actor_id=username,
                 gateway_url=st.secrets["GATEWAY_URL"],
                 region=st.secrets["AWS_DEFAULT_REGION"]
             ):
-                event_count += 1
-                st.toast(f"イベント {event_count}: {event['type']}")
-
-                if event["type"] == "debug":
-                    st.warning(f"DEBUG: {event.get('message', '')}")
-
-                elif event["type"] == "error":
+                if event["type"] == "error":
                     st.error(f"エラー: {event.get('message', 'Unknown error')}")
                     break
 
@@ -90,7 +80,6 @@ def main_app():
                     text_holder.markdown(buffer)
 
             # 最後に残ったテキストを表示
-            st.success(f"ストリーム終了: イベント数={event_count}, バッファ長={len(buffer)}")
             text_holder.markdown(buffer)
 
 # メイン処理を実行
