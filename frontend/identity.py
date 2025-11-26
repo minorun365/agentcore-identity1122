@@ -117,9 +117,9 @@ def handle_oauth2_callback(actor_id: str) -> bool:
             # AWS認証情報
             region = st.secrets.get("AWS_DEFAULT_REGION", "us-east-1")
 
-            # AgentCore Identity クライアント
+            # AgentCore クライアント（Identity機能を含む）
             client = boto3.client(
-                "bedrock-agentcore-identity",
+                "bedrock-agentcore",
                 region_name=region,
                 aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
                 aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY"),
