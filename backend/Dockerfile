@@ -11,6 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # アプリケーションコードをコピー
 COPY backend/src ./src
 
+# Atlassian Cloud ID（Confluence連携用）
+ENV ATLASSIAN_CLOUD_ID="92661577-7kk8-1484-72a0-2b1k0b935a33"
+
 # ポート8080を公開（AgentCore Runtimeの要件）
 EXPOSE 8080
 

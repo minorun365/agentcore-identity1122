@@ -87,17 +87,22 @@ def validate_identity_params(access_token: str, actor_id: str, session_id: str) 
 ATLASSIAN_PROVIDER_NAME = "atlassian-oauth"
 CONFLUENCE_SCOPES = ["read:confluence-content.all", "read:confluence-space.summary", "offline_access"]
 
+# Atlassian Cloud ID（環境変数から取得、またはデフォルト値）
+import os
+ATLASSIAN_CLOUD_ID = os.environ.get("ATLASSIAN_CLOUD_ID", "")
+
 
 @tool
-async def search_confluence(query: str, cloud_id: str, limit: int = 10) -> str:
+async def search_confluence(query: str, limit: int = 10) -> str:
     """
     Confluenceでページを検索します。
 
     Args:
         query: 検索クエリ（CQL形式、例: "text ~ 'キーワード'"）
-        cloud_id: Atlassian Cloud ID
         limit: 取得するページ数
     """
+    if not ATLASSIAN_CLOUD_ID:
+        return "エラー: ATLASSIAN_CLOUD_ID が設定されていません"
     token_holder = {}
 
     @requires_access_token(
@@ -116,7 +121,7 @@ async def search_confluence(query: str, cloud_id: str, limit: int = 10) -> str:
     if not access_token:
         return "エラー: 認証が必要です"
 
-    url = f"https://api.atlassian.com/ex/confluence/{cloud_id}/wiki/rest/api/content/search"
+    url = f"https://api.atlassian.com/ex/confluence/{ATLASSIAN_CLOUD_ID}/wiki/rest/api/content/search"
     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
     params = {"cql": query, "limit": limit, "expand": "space,version"}
 
@@ -136,14 +141,15 @@ async def search_confluence(query: str, cloud_id: str, limit: int = 10) -> str:
 
 
 @tool
-async def get_confluence_page(page_id: str, cloud_id: str) -> str:
+async def get_confluence_page(page_id: str) -> str:
     """
     Confluenceの特定ページの内容を取得します。
 
     Args:
         page_id: ConfluenceページID
-        cloud_id: Atlassian Cloud ID
     """
+    if not ATLASSIAN_CLOUD_ID:
+        return "エラー: ATLASSIAN_CLOUD_ID が設定されていません"
     token_holder = {}
 
     @requires_access_token(
@@ -162,7 +168,7 @@ async def get_confluence_page(page_id: str, cloud_id: str) -> str:
     if not access_token:
         return "エラー: 認証が必要です"
 
-    url = f"https://api.atlassian.com/ex/confluence/{cloud_id}/wiki/rest/api/content/{page_id}"
+    url = f"https://api.atlassian.com/ex/confluence/{ATLASSIAN_CLOUD_ID}/wiki/rest/api/content/{page_id}"
     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
     params = {"expand": "body.storage,space,version"}
 
