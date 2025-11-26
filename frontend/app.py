@@ -59,12 +59,18 @@ def main_app():
                     st.session_state.threads[session_id] = {"title": title, "messages": []}
         st.session_state.memory_sessions_loaded = True
 
-    # サイドバー：スレッド一覧
+    # サイドバー：ユーザー情報とスレッド一覧
     with st.sidebar:
-        st.header("会話履歴")
+        st.write(f"**{username}**")
+        if st.button("ログアウト", use_container_width=True):
+            authenticator.logout()
+
+        st.divider()
+
+        st.subheader("会話履歴")
 
         # 新規スレッド作成ボタン
-        if st.button("新しい会話"):
+        if st.button("新しい会話", use_container_width=True):
             new_id = str(uuid.uuid4())
             st.session_state.threads[new_id] = {"title": "新しい会話", "messages": []}
             st.session_state.current_thread_id = new_id
@@ -80,9 +86,10 @@ def main_app():
         )
         for thread_id, thread_data in sorted_threads:
             is_current = thread_id == st.session_state.current_thread_id
-            label = thread_data["title"]
             if is_current:
-                label = f"▶ {label}"
+                label = "▶ 現在の会話"
+            else:
+                label = thread_data["title"]
             if st.button(label, key=thread_id, use_container_width=True):
                 st.session_state.current_thread_id = thread_id
                 st.rerun()
@@ -97,14 +104,8 @@ def main_app():
     current_thread = st.session_state.threads[st.session_state.current_thread_id]
     messages = current_thread["messages"]
 
-    # ヘッダー部分（ユーザー名とログアウトボタン）
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.title("なんでも検索エージェント")
-        st.write(f"ようこそ、**{username}**さん！")
-    with col2:
-        if st.button("ログアウト"):
-            authenticator.logout()
+    # ヘッダー部分
+    st.title("なんでも検索エージェント")
 
     st.write("Strands AgentsがMCPサーバーを使って情報収集します！")
 
