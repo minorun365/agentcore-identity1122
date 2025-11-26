@@ -91,23 +91,6 @@ CONFLUENCE_SCOPES = ["read:confluence-content.all", "read:confluence-space.summa
 import os
 ATLASSIAN_CLOUD_ID = os.environ.get("ATLASSIAN_CLOUD_ID", "")
 
-# OAuth2 コールバックURL（Streamlit Cloudアプリ - Session Binding用）
-OAUTH2_CALLBACK_URL = os.environ.get(
-    "OAUTH2_CALLBACK_URL",
-    "https://agentcore-identity1122.streamlit.app"
-)
-
-
-class AuthRequiredException(Exception):
-    """認証が必要な場合に投げる例外"""
-    def __init__(self, auth_url: str):
-        self.auth_url = auth_url
-        super().__init__(f"認証が必要です: {auth_url}")
-
-
-def _raise_auth_required(url: str):
-    """認証URLを受け取ったら例外を投げてポーリングを止める"""
-    raise AuthRequiredException(url)
 
 
 async def _search_confluence_impl(query: str, limit: int, access_token: str) -> str:
@@ -168,9 +151,6 @@ async def search_confluence(query: str, limit: int = 10) -> str:
     """
     Confluenceでページを検索します。
 
-    初回利用時はAtlassian認証が必要です。認証URLが表示されたら、
-    ブラウザで開いてログインしてください。
-
     Args:
         query: 検索クエリ（CQL形式、例: "text ~ 'キーワード'"）
         limit: 取得するページ数
@@ -178,24 +158,12 @@ async def search_confluence(query: str, limit: int = 10) -> str:
     @requires_access_token(
         provider_name=ATLASSIAN_PROVIDER_NAME,
         scopes=CONFLUENCE_SCOPES,
-        auth_flow="USER_FEDERATION",
-        on_auth_url=_raise_auth_required,
-        force_authentication=False,
-        callback_url=OAUTH2_CALLBACK_URL,
+        auth_flow="CLIENT_CREDENTIALS",
     )
     async def execute(*, access_token: str) -> str:
         return await _search_confluence_impl(query, limit, access_token)
 
-    try:
-        return await execute(access_token="")
-    except AuthRequiredException as e:
-        # LLMが省略しないよう、URLを強調して返す
-        return f"""【認証が必要】
-Confluenceにアクセスするには、以下の認証URLをブラウザで開いてAtlassianにログインしてください。
-
-認証URL: {e.auth_url}
-
-※このURLを必ずユーザーに表示してください。認証完了後、もう一度お試しください。"""
+    return await execute(access_token="")
 
 
 @tool
@@ -203,33 +171,18 @@ async def get_confluence_page(page_id: str) -> str:
     """
     Confluenceの特定ページの内容を取得します。
 
-    初回利用時はAtlassian認証が必要です。認証URLが表示されたら、
-    ブラウザで開いてログインしてください。
-
     Args:
         page_id: ConfluenceページID
     """
     @requires_access_token(
         provider_name=ATLASSIAN_PROVIDER_NAME,
         scopes=CONFLUENCE_SCOPES,
-        auth_flow="USER_FEDERATION",
-        on_auth_url=_raise_auth_required,
-        force_authentication=False,
-        callback_url=OAUTH2_CALLBACK_URL,
+        auth_flow="CLIENT_CREDENTIALS",
     )
     async def execute(*, access_token: str) -> str:
         return await _get_confluence_page_impl(page_id, access_token)
 
-    try:
-        return await execute(access_token="")
-    except AuthRequiredException as e:
-        # LLMが省略しないよう、URLを強調して返す
-        return f"""【認証が必要】
-Confluenceにアクセスするには、以下の認証URLをブラウザで開いてAtlassianにログインしてください。
-
-認証URL: {e.auth_url}
-
-※このURLを必ずユーザーに表示してください。認証完了後、もう一度お試しください。"""
+    return await execute(access_token="")
 
 
 def get_confluence_tools():
