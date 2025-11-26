@@ -1,78 +1,98 @@
+"""
+AgentCore Runtime - メインエントリーポイント
+
+このファイルは、AgentCoreの各機能を統合してエージェントを実行します。
+
+使用するAgentCore機能:
+- Runtime: エージェントのホスティングとスケーリング
+- Identity: Cognito認証によるアクセス制御
+- Gateway: MCPツールの統合管理
+- Memory: 会話履歴の永続化
+- Observability: CloudWatchによる監視
+"""
+
 from bedrock_agentcore import BedrockAgentCoreApp
 from strands import Agent
-from .memory import create_session_manager
+
+# 各AgentCore機能モジュール
+from .identity import validate_identity_params
 from .gateway import create_gateway_client
+from .memory import create_session_manager
 from .observability import create_trace_attributes
 
+# AgentCoreアプリケーション
 app = BedrockAgentCoreApp()
 
-# AgentCore Memory設定
+# 設定
 MEMORY_ID = "identity1122-chChJ7CEmJ"
-REGION_NAME = "us-east-1"
+REGION = "us-east-1"
+MODEL_ID = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
 
 @app.entrypoint
 async def invoke(payload):
     """
-    Gateway統合 + Memory対応のAIエージェント（ストリーミング対応）
+    エージェント実行エントリーポイント
 
     Args:
         payload: {
             "prompt": ユーザーのメッセージ,
             "access_token": Cognito JWTアクセストークン,
             "gateway_url": Gateway MCP URL,
-            "session_id": セッションID（会話の継続性を保つ）,
+            "session_id": セッションID,
             "actor_id": アクターID（ユーザー識別子）
         }
     """
-    user_message = payload.get("prompt", "Hello!")
+    # ペイロードから値を取得
+    prompt = payload.get("prompt", "Hello!")
     access_token = payload.get("access_token")
     gateway_url = payload.get("gateway_url")
     session_id = payload.get("session_id")
     actor_id = payload.get("actor_id")
 
-    if not access_token or not gateway_url:
-        yield "エラー: access_tokenまたはgateway_urlが指定されていません"
+    # Identity: パラメータ検証
+    error = validate_identity_params(access_token, actor_id, session_id)
+    if error:
+        yield f"エラー: {error}"
         return
 
-    if not session_id or not actor_id:
-        yield "エラー: session_idまたはactor_idが指定されていません"
+    if not gateway_url:
+        yield "エラー: gateway_urlが指定されていません"
         return
 
-    # AgentCore MemoryのSessionManagerを作成
+    # Memory: セッション管理
     session_manager = create_session_manager(
         memory_id=MEMORY_ID,
         session_id=session_id,
         actor_id=actor_id,
-        region=REGION_NAME
+        region=REGION
     )
 
-    # MCPクライアントでGatewayに接続
+    # Gateway: MCPクライアント作成
     mcp_client = create_gateway_client(gateway_url, access_token)
 
-    # Gatewayからツールを取得してエージェントを実行
+    # エージェント実行
     with mcp_client:
-        # Gateway経由で利用可能なツール（Tavily検索など）を取得
         tools = mcp_client.list_tools_sync()
 
-        # Strandsエージェント作成（SessionManagerで会話履歴を管理）
         agent = Agent(
-            model="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            model=MODEL_ID,
             tools=tools,
-            session_manager=session_manager,  # 会話履歴を保持
-            # CloudWatchトレースにカスタム属性を追加
+            session_manager=session_manager,
+            # Observability: トレース属性
             trace_attributes=create_trace_attributes(
                 session_id=session_id,
                 actor_id=actor_id,
                 gateway_url=gateway_url,
                 memory_id=MEMORY_ID,
-                region=REGION_NAME
+                region=REGION
             )
         )
 
-        # ストリーミングでエージェント実行
-        stream = agent.stream_async(user_message)
-        async for event in stream:
+        # ストリーミング実行
+        async for event in agent.stream_async(prompt):
             yield event
+
 
 if __name__ == "__main__":
     app.run()

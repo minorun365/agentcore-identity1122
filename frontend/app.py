@@ -61,8 +61,8 @@ def main_app():
 
     # サイドバー：ユーザー情報とスレッド一覧
     with st.sidebar:
-        st.caption("ユーザー名")
-        st.write(f"**{username}**")
+        st.subheader("ユーザー名")
+        st.write(username)
         if st.button("ログアウト", use_container_width=True):
             authenticator.logout()
 
