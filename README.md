@@ -187,83 +187,28 @@ AWS_DEFAULT_REGION = "us-east-1"
 
 ## デプロイ手順
 
-### ステップ1: AWS SSO ログイン
+詳細は [DEPLOY.md](./DEPLOY.md) を参照してください。
+
+### クイックデプロイ
 
 ```bash
+# AWS認証
 aws sso login --profile sandbox
-```
-
-### ステップ2: ECR にログイン
-
-```bash
-aws ecr get-login-password --region us-east-1 --profile sandbox | \
-  docker login --username AWS --password-stdin \
-  715841358122.dkr.ecr.us-east-1.amazonaws.com
-```
-
-### ステップ3: Docker イメージをビルド＆プッシュ
-
-```bash
-# プロジェクトルートで実行
-docker buildx build --platform linux/arm64 \
-  -t 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest \
-  -f backend/Dockerfile .
-
-docker push 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest
-```
-
-**⚠️ 重要:**
-- ARM64アーキテクチャが必須（AgentCore Runtimeの要件）
-- プロジェクトルートからビルドすること
-- Dockerfileは `backend/Dockerfile` を使用
-
-### ステップ4: AgentCore Runtime を更新
-
-AWS CLIでRuntimeを更新します：
-
-```bash
 export AWS_PROFILE=sandbox
 
+# ECRログイン → ビルド → プッシュ → Runtime更新
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 715841358122.dkr.ecr.us-east-1.amazonaws.com
+docker buildx build --platform linux/arm64 -t 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest -f backend/Dockerfile .
+docker push 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest
+
+# Runtime更新（--authorizer-configuration 必須！）
 aws bedrock-agentcore-control update-agent-runtime \
   --region "us-east-1" \
   --agent-runtime-id "hosted_agent_kogc7-b1Enyl6XB6" \
   --agent-runtime-artifact "containerConfiguration={containerUri=715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest}" \
   --role-arn "arn:aws:iam::715841358122:role/service-role/AmazonBedrockAgentCoreRuntimeDefaultServiceRole-9js7z" \
   --network-configuration '{"networkMode":"PUBLIC"}' \
-  --authorizer-configuration '{
-    "customJWTAuthorizer": {
-      "discoveryUrl": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_hALafr7YC/.well-known/openid-configuration",
-      "allowedClients": ["55u30q7bfb0fbj48qavmer0a1m"]
-    }
-  }'
-```
-
-**⚠️ 重要: `--authorizer-configuration` を必ず指定すること！**
-
-このパラメータを省略すると、認証タイプがデフォルトの `IAM許可` に戻ってしまい、Cognito JWT認証が無効になります。
-
-### ステップ5: デプロイ完了を確認
-
-```bash
-aws bedrock-agentcore-control get-agent-runtime \
-  --region us-east-1 \
-  --agent-runtime-id hosted_agent_kogc7-b1Enyl6XB6 \
-  --query '[status, authorizerConfiguration]' \
-  --output json \
-  --profile sandbox
-```
-
-以下のように表示されればOKです：
-```json
-[
-    "READY",
-    {
-        "customJWTAuthorizer": {
-            "discoveryUrl": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_hALafr7YC/.well-known/openid-configuration",
-            "allowedClients": ["55u30q7bfb0fbj48qavmer0a1m"]
-        }
-    }
-]
+  --authorizer-configuration '{"customJWTAuthorizer":{"discoveryUrl":"https://cognito-idp.us-east-1.amazonaws.com/us-east-1_hALafr7YC/.well-known/openid-configuration","allowedClients":["55u30q7bfb0fbj48qavmer0a1m"]}}'
 ```
 
 ---
