@@ -87,9 +87,15 @@ def validate_identity_params(access_token: str, actor_id: str, session_id: str) 
 ATLASSIAN_PROVIDER_NAME = "atlassian-oauth"
 CONFLUENCE_SCOPES = ["read:confluence-content.all", "read:confluence-space.summary", "offline_access"]
 
-# Atlassian Cloud ID（環境変数から取得、またはデフォルト値）
+# Atlassian Cloud ID（環境変数から取得）
 import os
 ATLASSIAN_CLOUD_ID = os.environ.get("ATLASSIAN_CLOUD_ID", "")
+
+# OAuth2 コールバックURL（AgentCore Identityが提供）
+OAUTH2_CALLBACK_URL = os.environ.get(
+    "OAUTH2_CALLBACK_URL",
+    "https://bedrock-agentcore.us-east-1.amazonaws.com/identities/oauth2/callback"
+)
 
 
 @tool
@@ -111,6 +117,7 @@ async def search_confluence(query: str, limit: int = 10) -> str:
         auth_flow="USER_FEDERATION",
         on_auth_url=lambda url: print(f"認証URL: {url}"),
         force_authentication=False,
+        callback_url=OAUTH2_CALLBACK_URL,
     )
     async def get_token(*, access_token: str):
         token_holder["token"] = access_token
@@ -158,6 +165,7 @@ async def get_confluence_page(page_id: str) -> str:
         auth_flow="USER_FEDERATION",
         on_auth_url=lambda url: print(f"認証URL: {url}"),
         force_authentication=False,
+        callback_url=OAUTH2_CALLBACK_URL,
     )
     async def get_token(*, access_token: str):
         token_holder["token"] = access_token
