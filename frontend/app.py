@@ -124,17 +124,13 @@ def main_app():
                 st.rerun()
 
     # ========================================
-    # 現在のスレッド選択
+    # 現在のスレッド選択（初期状態は常に「新しい会話」）
     # ========================================
 
     if st.session_state.current_thread_id is None:
-        if st.session_state.threads:
-            latest_thread_id = sorted(st.session_state.threads.keys(), reverse=True)[0]
-            st.session_state.current_thread_id = latest_thread_id
-        else:
-            new_id = str(uuid.uuid4())
-            st.session_state.threads[new_id] = {"title": "新しい会話", "messages": []}
-            st.session_state.current_thread_id = new_id
+        new_id = str(uuid.uuid4())
+        st.session_state.threads[new_id] = {"title": "新しい会話", "messages": []}
+        st.session_state.current_thread_id = new_id
 
     current_thread = st.session_state.threads[st.session_state.current_thread_id]
     messages = current_thread["messages"]
