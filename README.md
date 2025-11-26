@@ -185,34 +185,6 @@ AWS_DEFAULT_REGION = "us-east-1"
 
 ---
 
-## デプロイ手順
-
-詳細は [DEPLOY.md](./DEPLOY.md) を参照してください。
-
-### クイックデプロイ
-
-```bash
-# AWS認証
-aws sso login --profile sandbox
-export AWS_PROFILE=sandbox
-
-# ECRログイン → ビルド → プッシュ → Runtime更新
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 715841358122.dkr.ecr.us-east-1.amazonaws.com
-docker buildx build --platform linux/arm64 -t 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest -f backend/Dockerfile .
-docker push 715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest
-
-# Runtime更新（--authorizer-configuration 必須！）
-aws bedrock-agentcore-control update-agent-runtime \
-  --region "us-east-1" \
-  --agent-runtime-id "hosted_agent_kogc7-b1Enyl6XB6" \
-  --agent-runtime-artifact "containerConfiguration={containerUri=715841358122.dkr.ecr.us-east-1.amazonaws.com/identity1122-agent:latest}" \
-  --role-arn "arn:aws:iam::715841358122:role/service-role/AmazonBedrockAgentCoreRuntimeDefaultServiceRole-9js7z" \
-  --network-configuration '{"networkMode":"PUBLIC"}' \
-  --authorizer-configuration '{"customJWTAuthorizer":{"discoveryUrl":"https://cognito-idp.us-east-1.amazonaws.com/us-east-1_hALafr7YC/.well-known/openid-configuration","allowedClients":["55u30q7bfb0fbj48qavmer0a1m"]}}'
-```
-
----
-
 ## 使い方
 
 ### ローカルでStreamlitアプリを起動
