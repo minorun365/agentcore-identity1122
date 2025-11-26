@@ -71,9 +71,14 @@ def main_app():
             for session in memory_sessions:
                 session_id = session.get("sessionId")
                 if session_id and session_id not in st.session_state.threads:
-                    created_at = session.get("createdAt", "")
-                    # タイトルは作成日時を使用（後で最初のメッセージで更新される）
-                    title = created_at[:10] if created_at else "過去の会話"
+                    created_at = session.get("createdAt")
+                    # datetimeオブジェクトの場合は文字列に変換
+                    if created_at and hasattr(created_at, "strftime"):
+                        title = created_at.strftime("%Y-%m-%d")
+                    elif created_at:
+                        title = str(created_at)[:10]
+                    else:
+                        title = "過去の会話"
                     st.session_state.threads[session_id] = {"title": title, "messages": []}
         st.session_state.memory_sessions_loaded = True
 
