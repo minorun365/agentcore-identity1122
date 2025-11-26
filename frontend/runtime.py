@@ -101,7 +101,8 @@ def list_memory_sessions(
     region: str = "us-east-1",
     max_results: int = 50,
     aws_access_key_id: str = None,
-    aws_secret_access_key: str = None
+    aws_secret_access_key: str = None,
+    aws_session_token: str = None
 ) -> List[Dict[str, Any]]:
     """
     AgentCore Memoryから指定アクターのセッション一覧を取得
@@ -113,21 +114,21 @@ def list_memory_sessions(
         max_results: 最大取得件数
         aws_access_key_id: AWSアクセスキーID（オプション）
         aws_secret_access_key: AWSシークレットアクセスキー（オプション）
+        aws_session_token: AWSセッショントークン（オプション）
 
     Returns:
         List[Dict]: セッション一覧（sessionId, actorId, createdAt含む）
     """
     try:
-        # AWS認証情報が指定されている場合はそれを使用
+        # AWS認証情報でクライアント作成
+        client_params = {'region_name': region}
         if aws_access_key_id and aws_secret_access_key:
-            client = boto3.client(
-                'bedrock-agentcore',
-                region_name=region,
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key
-            )
-        else:
-            client = boto3.client('bedrock-agentcore', region_name=region)
+            client_params['aws_access_key_id'] = aws_access_key_id
+            client_params['aws_secret_access_key'] = aws_secret_access_key
+            if aws_session_token:
+                client_params['aws_session_token'] = aws_session_token
+
+        client = boto3.client('bedrock-agentcore', **client_params)
 
         sessions = []
         next_token = None
@@ -154,4 +155,81 @@ def list_memory_sessions(
     except Exception as e:
         # エラーの場合は空のリストを返す（ローカル管理にフォールバック）
         print(f"Warning: Failed to list sessions from AgentCore Memory: {e}")
+        return []
+
+
+def list_session_events(
+    memory_id: str,
+    actor_id: str,
+    session_id: str,
+    region: str = "us-east-1",
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None,
+    aws_session_token: str = None
+) -> List[Dict[str, Any]]:
+    """
+    AgentCore Memoryから指定セッションの会話履歴（イベント）を取得
+
+    Args:
+        memory_id: AgentCore MemoryのID
+        actor_id: アクターID（ユーザー識別子）
+        session_id: セッションID
+        region: AWSリージョン
+        aws_access_key_id: AWSアクセスキーID（オプション）
+        aws_secret_access_key: AWSシークレットアクセスキー（オプション）
+        aws_session_token: AWSセッショントークン（オプション）
+
+    Returns:
+        List[Dict]: メッセージ一覧（role, content形式）
+    """
+    try:
+        # AWS認証情報でクライアント作成
+        client_params = {'region_name': region}
+        if aws_access_key_id and aws_secret_access_key:
+            client_params['aws_access_key_id'] = aws_access_key_id
+            client_params['aws_secret_access_key'] = aws_secret_access_key
+            if aws_session_token:
+                client_params['aws_session_token'] = aws_session_token
+
+        client = boto3.client('bedrock-agentcore', **client_params)
+
+        # イベント一覧を取得
+        events = []
+        next_token = None
+
+        while True:
+            params = {
+                'memoryId': memory_id,
+                'actorId': actor_id,
+                'sessionId': session_id,
+                'includePayloads': True
+            }
+            if next_token:
+                params['nextToken'] = next_token
+
+            response = client.list_events(**params)
+
+            events.extend(response.get('events', []))
+
+            next_token = response.get('nextToken')
+            if not next_token:
+                break
+
+        # イベントをメッセージ形式に変換
+        messages = []
+        for event in events:
+            payload = event.get('payload', [])
+            for item in payload:
+                if 'conversational' in item:
+                    conv = item['conversational']
+                    role_raw = conv.get('role', 'USER')
+                    role = 'user' if role_raw == 'USER' else 'assistant'
+                    content = conv.get('content', {}).get('text', '')
+                    if content:
+                        messages.append({'role': role, 'content': content})
+
+        return messages
+
+    except Exception as e:
+        print(f"Warning: Failed to list events from AgentCore Memory: {e}")
         return []

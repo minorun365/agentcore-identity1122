@@ -4,7 +4,7 @@ import streamlit as st
 from streamlit_cognito_auth import CognitoAuthenticator
 
 # AgentCoreランタイム呼び出しモジュールをインポート
-from runtime import invoke_agent_stream, list_memory_sessions
+from runtime import invoke_agent_stream, list_memory_sessions, list_session_events
 
 # Cognito認証の設定
 authenticator = CognitoAuthenticator(
@@ -47,7 +47,8 @@ def main_app():
                 actor_id=username,
                 region=st.secrets.get("AWS_DEFAULT_REGION", "us-east-1"),
                 aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY")
+                aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY"),
+                aws_session_token=st.secrets.get("AWS_SESSION_TOKEN")
             )
             # 取得したセッションをスレッド一覧に追加
             for session in memory_sessions:
@@ -61,7 +62,7 @@ def main_app():
 
     # サイドバー：ユーザー情報とスレッド一覧
     with st.sidebar:
-        st.subheader("ユーザー名")
+        st.subheader("ユーザーID")
         st.write(username)
         if st.button("ログアウト", use_container_width=True):
             authenticator.logout()
@@ -100,6 +101,26 @@ def main_app():
     # 現在のスレッドのメッセージを取得
     current_thread = st.session_state.threads[st.session_state.current_thread_id]
     messages = current_thread["messages"]
+
+    # メッセージが空の場合、AgentCore Memoryから会話履歴を取得
+    memory_id = st.secrets.get("MEMORY_ID")
+    if not messages and memory_id:
+        loaded_messages = list_session_events(
+            memory_id=memory_id,
+            actor_id=username,
+            session_id=st.session_state.current_thread_id,
+            region=st.secrets.get("AWS_DEFAULT_REGION", "us-east-1"),
+            aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY"),
+            aws_session_token=st.secrets.get("AWS_SESSION_TOKEN")
+        )
+        if loaded_messages:
+            current_thread["messages"] = loaded_messages
+            messages = current_thread["messages"]
+            # タイトルを最初のユーザーメッセージで更新
+            first_user_msg = next((m["content"] for m in messages if m["role"] == "user"), None)
+            if first_user_msg:
+                current_thread["title"] = first_user_msg[:20] + ("..." if len(first_user_msg) > 20 else "")
 
     # ヘッダー部分
     st.title("なんでも検索エージェント")
