@@ -1,10 +1,25 @@
 # 必要なライブラリをインポート
 import uuid
+import base64
+import json
 import streamlit as st
 from streamlit_cognito_auth import CognitoAuthenticator
 
 # AgentCoreランタイム呼び出しモジュールをインポート
 from runtime import invoke_agent_stream, list_memory_sessions, list_session_events
+
+
+def get_cognito_sub(access_token: str) -> str:
+    """JWTアクセストークンからCognitoのsub（ユーザーID）を取得"""
+    try:
+        payload_part = access_token.split(".")[1]
+        padding = 4 - len(payload_part) % 4
+        if padding != 4:
+            payload_part += "=" * padding
+        payload = json.loads(base64.urlsafe_b64decode(payload_part))
+        return payload.get("sub", "")
+    except Exception:
+        return ""
 
 # Cognito認証の設定
 authenticator = CognitoAuthenticator(
@@ -23,8 +38,10 @@ if not is_logged_in:
 # ログイン成功後のメインアプリケーション
 def main_app():
     """メインアプリケーション"""
-    # ユーザー名を取得
-    username = authenticator.get_username()
+    # ユーザー情報を取得
+    display_name = authenticator.get_username()  # 表示用
+    access_token = authenticator.get_credentials().access_token
+    actor_id = get_cognito_sub(access_token)  # AgentCore Memory用（Cognito sub）
 
     # スレッド一覧を初期化
     if "threads" not in st.session_state:
@@ -44,7 +61,7 @@ def main_app():
         if memory_id:
             memory_sessions = list_memory_sessions(
                 memory_id=memory_id,
-                actor_id=username,
+                actor_id=actor_id,
                 region=st.secrets.get("AWS_DEFAULT_REGION", "us-east-1"),
                 aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
                 aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY"),
@@ -63,7 +80,7 @@ def main_app():
     # サイドバー：ユーザー情報とスレッド一覧
     with st.sidebar:
         st.subheader("ユーザーID")
-        st.write(username)
+        st.write(display_name)
         if st.button("ログアウト", use_container_width=True):
             authenticator.logout()
 
@@ -107,7 +124,7 @@ def main_app():
     if not messages and memory_id:
         loaded_messages = list_session_events(
             memory_id=memory_id,
-            actor_id=username,
+            actor_id=actor_id,
             session_id=st.session_state.current_thread_id,
             region=st.secrets.get("AWS_DEFAULT_REGION", "us-east-1"),
             aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
@@ -151,9 +168,9 @@ def main_app():
             for event in invoke_agent_stream(
                 agent_arn=st.secrets["AGENT_RUNTIME_ARN"],
                 prompt=prompt,
-                access_token=authenticator.get_credentials().access_token,
+                access_token=access_token,
                 session_id=st.session_state.current_thread_id,
-                actor_id=username,
+                actor_id=actor_id,
                 gateway_url=st.secrets["GATEWAY_URL"],
                 region=st.secrets["AWS_DEFAULT_REGION"]
             ):
