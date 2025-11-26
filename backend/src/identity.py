@@ -98,35 +98,22 @@ OAUTH2_CALLBACK_URL = os.environ.get(
 )
 
 
-@tool
-async def search_confluence(query: str, limit: int = 10) -> str:
-    """
-    Confluenceでページを検索します。
+class AuthRequiredException(Exception):
+    """認証が必要な場合に投げる例外"""
+    def __init__(self, auth_url: str):
+        self.auth_url = auth_url
+        super().__init__(f"認証が必要です: {auth_url}")
 
-    Args:
-        query: 検索クエリ（CQL形式、例: "text ~ 'キーワード'"）
-        limit: 取得するページ数
-    """
+
+def _raise_auth_required(url: str):
+    """認証URLを受け取ったら例外を投げてポーリングを止める"""
+    raise AuthRequiredException(url)
+
+
+async def _search_confluence_impl(query: str, limit: int, access_token: str) -> str:
+    """Confluence検索の実装（トークン取得後に呼ばれる）"""
     if not ATLASSIAN_CLOUD_ID:
         return "エラー: ATLASSIAN_CLOUD_ID が設定されていません"
-    token_holder = {}
-
-    @requires_access_token(
-        provider_name=ATLASSIAN_PROVIDER_NAME,
-        scopes=CONFLUENCE_SCOPES,
-        auth_flow="USER_FEDERATION",
-        on_auth_url=lambda url: print(f"認証URL: {url}"),
-        force_authentication=False,
-        callback_url=OAUTH2_CALLBACK_URL,
-    )
-    async def get_token(*, access_token: str):
-        token_holder["token"] = access_token
-
-    await get_token()
-    access_token = token_holder.get("token", "")
-
-    if not access_token:
-        return "エラー: 認証が必要です"
 
     url = f"https://api.atlassian.com/ex/confluence/{ATLASSIAN_CLOUD_ID}/wiki/rest/api/content/search"
     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
@@ -135,7 +122,7 @@ async def search_confluence(query: str, limit: int = 10) -> str:
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers, params=params)
         if response.status_code != 200:
-            return f"エラー: HTTP {response.status_code}"
+            return f"エラー: HTTP {response.status_code} - {response.text}"
 
         results = response.json().get("results", [])
         if not results:
@@ -147,34 +134,10 @@ async def search_confluence(query: str, limit: int = 10) -> str:
         return output
 
 
-@tool
-async def get_confluence_page(page_id: str) -> str:
-    """
-    Confluenceの特定ページの内容を取得します。
-
-    Args:
-        page_id: ConfluenceページID
-    """
+async def _get_confluence_page_impl(page_id: str, access_token: str) -> str:
+    """Confluenceページ取得の実装（トークン取得後に呼ばれる）"""
     if not ATLASSIAN_CLOUD_ID:
         return "エラー: ATLASSIAN_CLOUD_ID が設定されていません"
-    token_holder = {}
-
-    @requires_access_token(
-        provider_name=ATLASSIAN_PROVIDER_NAME,
-        scopes=CONFLUENCE_SCOPES,
-        auth_flow="USER_FEDERATION",
-        on_auth_url=lambda url: print(f"認証URL: {url}"),
-        force_authentication=False,
-        callback_url=OAUTH2_CALLBACK_URL,
-    )
-    async def get_token(*, access_token: str):
-        token_holder["token"] = access_token
-
-    await get_token()
-    access_token = token_holder.get("token", "")
-
-    if not access_token:
-        return "エラー: 認証が必要です"
 
     url = f"https://api.atlassian.com/ex/confluence/{ATLASSIAN_CLOUD_ID}/wiki/rest/api/content/{page_id}"
     headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
@@ -183,7 +146,7 @@ async def get_confluence_page(page_id: str) -> str:
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers, params=params)
         if response.status_code != 200:
-            return f"エラー: HTTP {response.status_code}"
+            return f"エラー: HTTP {response.status_code} - {response.text}"
 
         page = response.json()
         body_html = page.get("body", {}).get("storage", {}).get("value", "")
@@ -198,6 +161,63 @@ async def get_confluence_page(page_id: str) -> str:
 内容:
 {body_text}
 """
+
+
+@tool
+async def search_confluence(query: str, limit: int = 10) -> str:
+    """
+    Confluenceでページを検索します。
+
+    初回利用時はAtlassian認証が必要です。認証URLが表示されたら、
+    ブラウザで開いてログインしてください。
+
+    Args:
+        query: 検索クエリ（CQL形式、例: "text ~ 'キーワード'"）
+        limit: 取得するページ数
+    """
+    @requires_access_token(
+        provider_name=ATLASSIAN_PROVIDER_NAME,
+        scopes=CONFLUENCE_SCOPES,
+        auth_flow="USER_FEDERATION",
+        on_auth_url=_raise_auth_required,
+        force_authentication=False,
+        callback_url=OAUTH2_CALLBACK_URL,
+    )
+    async def execute(*, access_token: str) -> str:
+        return await _search_confluence_impl(query, limit, access_token)
+
+    try:
+        return await execute(access_token="")
+    except AuthRequiredException as e:
+        return f"🔐 Atlassian認証が必要です。以下のURLをブラウザで開いてログインしてください:\n\n{e.auth_url}\n\n認証完了後、もう一度検索をリクエストしてください。"
+
+
+@tool
+async def get_confluence_page(page_id: str) -> str:
+    """
+    Confluenceの特定ページの内容を取得します。
+
+    初回利用時はAtlassian認証が必要です。認証URLが表示されたら、
+    ブラウザで開いてログインしてください。
+
+    Args:
+        page_id: ConfluenceページID
+    """
+    @requires_access_token(
+        provider_name=ATLASSIAN_PROVIDER_NAME,
+        scopes=CONFLUENCE_SCOPES,
+        auth_flow="USER_FEDERATION",
+        on_auth_url=_raise_auth_required,
+        force_authentication=False,
+        callback_url=OAUTH2_CALLBACK_URL,
+    )
+    async def execute(*, access_token: str) -> str:
+        return await _get_confluence_page_impl(page_id, access_token)
+
+    try:
+        return await execute(access_token="")
+    except AuthRequiredException as e:
+        return f"🔐 Atlassian認証が必要です。以下のURLをブラウザで開いてログインしてください:\n\n{e.auth_url}\n\n認証完了後、もう一度リクエストしてください。"
 
 
 def get_confluence_tools():
