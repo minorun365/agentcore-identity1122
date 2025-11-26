@@ -215,9 +215,12 @@ def list_session_events(
             if not next_token:
                 break
 
+        # イベントを古い順にソート（eventTimestampで昇順）
+        events_sorted = sorted(events, key=lambda e: e.get('eventTimestamp', ''))
+
         # イベントをメッセージ形式に変換（textのみ、toolUse/toolResultは除外）
         messages = []
-        for event in events:
+        for event in events_sorted:
             payload = event.get('payload', [])
             for item in payload:
                 if 'conversational' in item:
