@@ -1,3 +1,15 @@
+"""
+AgentCore Observability - 監視・トレース（バックエンド用）
+
+AgentCore Observabilityは、エージェントの実行状況を監視する機能です。
+CloudWatch Logsやメトリクスと連携して、トレース情報を収集します。
+
+主な機能:
+- 実行トレースの記録
+- カスタム属性の付与
+- CloudWatchへの連携
+"""
+
 from typing import Dict, Any
 
 
@@ -9,17 +21,24 @@ def create_trace_attributes(
     region: str
 ) -> Dict[str, Any]:
     """
-    CloudWatch トレースに追加するカスタム属性を作成
+    CloudWatchトレースに追加するカスタム属性を作成
+
+    これらの属性はCloudWatch Logsに記録され、
+    ログ検索やデバッグに活用できます。
 
     Args:
-        session_id: セッション ID（会話の継続性を保つ）
-        actor_id: アクター ID（ユーザー識別子）
+        session_id: セッションID（会話スレッドの識別子）
+        actor_id: アクターID（ユーザー識別子）
         gateway_url: Gateway MCP URL
         memory_id: AgentCore Memory ID
-        region: AWS リージョン
+        region: AWSリージョン
 
     Returns:
         Dict[str, Any]: トレース属性の辞書
+
+    CloudWatchでの活用例:
+        - session.idでフィルタして特定会話のログを追跡
+        - actor.idでフィルタして特定ユーザーの履歴を確認
     """
     return {
         "session.id": session_id,
