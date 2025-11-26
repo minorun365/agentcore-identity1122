@@ -14,7 +14,7 @@ import uuid
 import streamlit as st
 
 # AgentCore機能モジュール
-from identity import create_authenticator, get_user_info
+from identity import create_authenticator, get_user_info, handle_oauth2_callback
 from runtime import invoke_agent_stream
 from memory import list_sessions, list_messages
 
@@ -42,6 +42,14 @@ def main_app():
     display_name = user_info["display_name"]
     access_token = user_info["access_token"]
     actor_id = user_info["actor_id"]
+
+    # ========================================
+    # OAuth2 3LOコールバック処理（外部サービス連携）
+    # ========================================
+    # URLに?session_id=xxxがある場合、外部サービス認証のコールバック
+    if handle_oauth2_callback(actor_id):
+        # コールバック処理後は通常画面を表示
+        pass
 
     # AWS認証情報（Memory API用）
     aws_credentials = {

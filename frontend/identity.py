@@ -8,10 +8,12 @@ AgentCore Identityは、エージェントへのアクセスを制御する認�
 - Cognito認証の初期化とログイン処理
 - JWTアクセストークンからユーザー情報を抽出
 - actor_id（AgentCore Memory用のユーザー識別子）の取得
+- OAuth2 3LOコールバック処理（外部サービス連携用）
 """
 
 import base64
 import json
+import boto3
 import streamlit as st
 from streamlit_cognito_auth import CognitoAuthenticator
 
@@ -82,3 +84,66 @@ def get_user_info(authenticator: CognitoAuthenticator) -> dict:
         "access_token": access_token,
         "actor_id": actor_id
     }
+
+
+# =============================================================================
+# OAuth2 3LO コールバック処理（外部サービス連携）
+# =============================================================================
+
+def handle_oauth2_callback(actor_id: str) -> bool:
+    """
+    OAuth2 3LOコールバックを処理する
+
+    AgentCore IdentityのUSER_FEDERATIONフローで、外部サービス（Atlassian等）の
+    認証完了後にリダイレクトされてきた場合、CompleteResourceTokenAuthを呼び出して
+    トークン取得を完了させる。
+
+    Args:
+        actor_id: ユーザー識別子（Cognito sub）
+
+    Returns:
+        bool: コールバック処理を実行した場合True
+    """
+    # クエリパラメータからsession_idを取得
+    query_params = st.query_params
+    session_id = query_params.get("session_id")
+
+    if not session_id:
+        return False
+
+    # コールバック処理中であることを表示
+    with st.spinner("外部サービスの認証を完了しています..."):
+        try:
+            # AWS認証情報
+            region = st.secrets.get("AWS_DEFAULT_REGION", "us-east-1")
+
+            # AgentCore Identity クライアント
+            client = boto3.client(
+                "bedrock-agentcore-identity",
+                region_name=region,
+                aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY"),
+                aws_session_token=st.secrets.get("AWS_SESSION_TOKEN")
+            )
+
+            # CompleteResourceTokenAuth を呼び出し
+            client.complete_resource_token_auth(
+                sessionUri=session_id,
+                userIdentifier={
+                    "userId": actor_id
+                }
+            )
+
+            # クエリパラメータをクリア
+            st.query_params.clear()
+
+            st.success("外部サービスの認証が完了しました！もう一度検索してください。")
+            return True
+
+        except Exception as e:
+            st.error(f"認証完了処理でエラーが発生しました: {e}")
+            # エラーでもクエリパラメータはクリア
+            st.query_params.clear()
+            return True
+
+    return False

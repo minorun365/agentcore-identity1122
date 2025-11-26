@@ -91,6 +91,12 @@ CONFLUENCE_SCOPES = ["read:confluence-content.all", "read:confluence-space.summa
 import os
 ATLASSIAN_CLOUD_ID = os.environ.get("ATLASSIAN_CLOUD_ID", "")
 
+# OAuth2 コールバックURL（Streamlit Cloudアプリ - Session Binding用）
+OAUTH2_CALLBACK_URL = os.environ.get(
+    "OAUTH2_CALLBACK_URL",
+    "https://agentcore-identity1122.streamlit.app"
+)
+
 
 class AuthRequiredException(Exception):
     """認証が必要な場合に投げる例外"""
@@ -175,6 +181,7 @@ async def search_confluence(query: str, limit: int = 10) -> str:
         auth_flow="USER_FEDERATION",
         on_auth_url=_raise_auth_required,
         force_authentication=False,
+        callback_url=OAUTH2_CALLBACK_URL,
     )
     async def execute(*, access_token: str) -> str:
         return await _search_confluence_impl(query, limit, access_token)
@@ -208,6 +215,7 @@ async def get_confluence_page(page_id: str) -> str:
         auth_flow="USER_FEDERATION",
         on_auth_url=_raise_auth_required,
         force_authentication=False,
+        callback_url=OAUTH2_CALLBACK_URL,
     )
     async def execute(*, access_token: str) -> str:
         return await _get_confluence_page_impl(page_id, access_token)
