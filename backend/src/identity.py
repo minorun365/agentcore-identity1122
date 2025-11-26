@@ -158,7 +158,7 @@ async def search_confluence(query: str, limit: int = 10) -> str:
     @requires_access_token(
         provider_name=ATLASSIAN_PROVIDER_NAME,
         scopes=CONFLUENCE_SCOPES,
-        auth_flow="CLIENT_CREDENTIALS",
+        auth_flow="M2M",
     )
     async def execute(*, access_token: str) -> str:
         return await _search_confluence_impl(query, limit, access_token)
@@ -177,7 +177,7 @@ async def get_confluence_page(page_id: str) -> str:
     @requires_access_token(
         provider_name=ATLASSIAN_PROVIDER_NAME,
         scopes=CONFLUENCE_SCOPES,
-        auth_flow="CLIENT_CREDENTIALS",
+        auth_flow="M2M",
     )
     async def execute(*, access_token: str) -> str:
         return await _get_confluence_page_impl(page_id, access_token)
