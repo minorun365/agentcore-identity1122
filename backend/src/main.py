@@ -15,7 +15,7 @@ from bedrock_agentcore import BedrockAgentCoreApp
 from strands import Agent
 
 # 各AgentCore機能モジュール
-from .identity import validate_identity_params
+from .identity import validate_identity_params, get_confluence_tools
 from .gateway import create_gateway_client
 from .memory import create_session_manager
 from .observability import create_trace_attributes
@@ -73,7 +73,10 @@ async def invoke(payload):
 
     # エージェント実行
     with mcp_client:
-        tools = mcp_client.list_tools_sync()
+        # Gateway MCPツール + Confluenceツール（Identity OAuth2）
+        gateway_tools = mcp_client.list_tools_sync()
+        confluence_tools = get_confluence_tools()
+        tools = gateway_tools + confluence_tools
 
         agent = Agent(
             model=MODEL_ID,
