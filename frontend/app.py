@@ -61,22 +61,19 @@ def main_app():
 
     # サイドバー：ユーザー情報とスレッド一覧
     with st.sidebar:
+        st.caption("ユーザー名")
         st.write(f"**{username}**")
         if st.button("ログアウト", use_container_width=True):
             authenticator.logout()
 
-        st.divider()
-
         st.subheader("会話履歴")
 
         # 新規スレッド作成ボタン
-        if st.button("新しい会話", use_container_width=True):
+        if st.button("新しい会話", use_container_width=True, type="primary"):
             new_id = str(uuid.uuid4())
             st.session_state.threads[new_id] = {"title": "新しい会話", "messages": []}
             st.session_state.current_thread_id = new_id
             st.rerun()
-
-        st.divider()
 
         # スレッド一覧を表示（新しい順）
         sorted_threads = sorted(
