@@ -1,16 +1,22 @@
 """
-AgentCore Identity - Cognito認証連携
+AgentCore Identity - 認証・認可管理（バックエンド用）
 
-AgentCore Identityは、エージェントへのアクセスを制御する認証・認可機能です。
-このモジュールでは、CognitoのJWTトークンを使用してユーザーを識別します。
+AgentCore Identityは、エージェントへのアクセス制御と外部サービス連携を提供します。
 
 主な機能:
-- JWTアクセストークンからユーザー情報を抽出
-- actor_id（ユーザー識別子）の取得
+1. Cognito認証: JWTトークンによるユーザー識別
+2. 外部サービス連携: OAuth2による外部API（Confluence等）へのアクセス
 """
 
 from typing import Optional
+from strands import tool
+from bedrock_agentcore.identity.auth import requires_access_token
+import httpx
 
+
+# =============================================================================
+# Cognito認証
+# =============================================================================
 
 def extract_actor_id(access_token: str) -> Optional[str]:
     """
@@ -71,3 +77,115 @@ def validate_identity_params(access_token: str, actor_id: str, session_id: str) 
         return "session_idは33文字以上にしてください（UUIDを推奨）"
 
     return None
+
+
+# =============================================================================
+# 外部サービス連携（Confluence）
+# =============================================================================
+
+# Atlassian OAuth2プロバイダー名（AgentCore Identityで作成）
+ATLASSIAN_PROVIDER_NAME = "atlassian-oauth"
+CONFLUENCE_SCOPES = ["read:confluence-content.all", "read:confluence-space.summary", "offline_access"]
+
+
+@tool
+async def search_confluence(query: str, cloud_id: str, limit: int = 10) -> str:
+    """
+    Confluenceでページを検索します。
+
+    Args:
+        query: 検索クエリ（CQL形式、例: "text ~ 'キーワード'"）
+        cloud_id: Atlassian Cloud ID
+        limit: 取得するページ数
+    """
+    token_holder = {}
+
+    @requires_access_token(
+        provider_name=ATLASSIAN_PROVIDER_NAME,
+        scopes=CONFLUENCE_SCOPES,
+        auth_flow="USER_FEDERATION",
+        on_auth_url=lambda url: print(f"認証URL: {url}"),
+        force_authentication=False,
+    )
+    async def get_token(*, access_token: str):
+        token_holder["token"] = access_token
+
+    await get_token()
+    access_token = token_holder.get("token", "")
+
+    if not access_token:
+        return "エラー: 認証が必要です"
+
+    url = f"https://api.atlassian.com/ex/confluence/{cloud_id}/wiki/rest/api/content/search"
+    headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+    params = {"cql": query, "limit": limit, "expand": "space,version"}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            return f"エラー: HTTP {response.status_code}"
+
+        results = response.json().get("results", [])
+        if not results:
+            return f"'{query}' に一致するページが見つかりません"
+
+        output = f"検索結果: {len(results)}件\n"
+        for page in results:
+            output += f"- {page.get('title')} (ID: {page.get('id')})\n"
+        return output
+
+
+@tool
+async def get_confluence_page(page_id: str, cloud_id: str) -> str:
+    """
+    Confluenceの特定ページの内容を取得します。
+
+    Args:
+        page_id: ConfluenceページID
+        cloud_id: Atlassian Cloud ID
+    """
+    token_holder = {}
+
+    @requires_access_token(
+        provider_name=ATLASSIAN_PROVIDER_NAME,
+        scopes=CONFLUENCE_SCOPES,
+        auth_flow="USER_FEDERATION",
+        on_auth_url=lambda url: print(f"認証URL: {url}"),
+        force_authentication=False,
+    )
+    async def get_token(*, access_token: str):
+        token_holder["token"] = access_token
+
+    await get_token()
+    access_token = token_holder.get("token", "")
+
+    if not access_token:
+        return "エラー: 認証が必要です"
+
+    url = f"https://api.atlassian.com/ex/confluence/{cloud_id}/wiki/rest/api/content/{page_id}"
+    headers = {"Authorization": f"Bearer {access_token}", "Accept": "application/json"}
+    params = {"expand": "body.storage,space,version"}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            return f"エラー: HTTP {response.status_code}"
+
+        page = response.json()
+        body_html = page.get("body", {}).get("storage", {}).get("value", "")
+
+        import re
+        body_text = re.sub(r'<[^>]+>', '', body_html)[:2000]
+
+        return f"""
+タイトル: {page.get('title')}
+スペース: {page.get('space', {}).get('name')}
+
+内容:
+{body_text}
+"""
+
+
+def get_confluence_tools():
+    """Confluenceツールのリストを返す"""
+    return [search_confluence, get_confluence_page]
