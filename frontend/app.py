@@ -4,7 +4,7 @@ import streamlit as st
 from streamlit_cognito_auth import CognitoAuthenticator
 
 # AgentCoreランタイム呼び出しモジュールをインポート
-from runtime import invoke_agent_stream
+from runtime import invoke_agent_stream, list_memory_sessions
 
 # Cognito認証の設定
 authenticator = CognitoAuthenticator(
@@ -23,19 +23,84 @@ if not is_logged_in:
 # ログイン成功後のメインアプリケーション
 def main_app():
     """メインアプリケーション"""
-    # セッションIDを初期化（UUIDを使用して33文字以上を保証）
-    if "session_id" not in st.session_state:
-        st.session_state.session_id = str(uuid.uuid4())
+    # ユーザー名を取得
+    username = authenticator.get_username()
 
-    # チャット履歴を初期化
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    # スレッド一覧を初期化
+    if "threads" not in st.session_state:
+        st.session_state.threads = {}  # {session_id: {"title": str, "messages": list}}
+
+    # 現在のスレッドIDを初期化
+    if "current_thread_id" not in st.session_state:
+        st.session_state.current_thread_id = None
+
+    # AgentCore Memoryからセッション一覧を取得済みフラグ
+    if "memory_sessions_loaded" not in st.session_state:
+        st.session_state.memory_sessions_loaded = False
+
+    # 初回のみAgentCore Memoryからセッション一覧を取得
+    if not st.session_state.memory_sessions_loaded:
+        memory_id = st.secrets.get("MEMORY_ID")
+        if memory_id:
+            memory_sessions = list_memory_sessions(
+                memory_id=memory_id,
+                actor_id=username,
+                region=st.secrets.get("AWS_DEFAULT_REGION", "us-east-1"),
+                aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY")
+            )
+            # 取得したセッションをスレッド一覧に追加
+            for session in memory_sessions:
+                session_id = session.get("sessionId")
+                if session_id and session_id not in st.session_state.threads:
+                    created_at = session.get("createdAt", "")
+                    # タイトルは作成日時を使用（後で最初のメッセージで更新される）
+                    title = created_at[:10] if created_at else "過去の会話"
+                    st.session_state.threads[session_id] = {"title": title, "messages": []}
+        st.session_state.memory_sessions_loaded = True
+
+    # サイドバー：スレッド一覧
+    with st.sidebar:
+        st.header("会話履歴")
+
+        # 新規スレッド作成ボタン
+        if st.button("新しい会話"):
+            new_id = str(uuid.uuid4())
+            st.session_state.threads[new_id] = {"title": "新しい会話", "messages": []}
+            st.session_state.current_thread_id = new_id
+            st.rerun()
+
+        st.divider()
+
+        # スレッド一覧を表示（新しい順）
+        sorted_threads = sorted(
+            st.session_state.threads.items(),
+            key=lambda x: x[0],
+            reverse=True
+        )
+        for thread_id, thread_data in sorted_threads:
+            is_current = thread_id == st.session_state.current_thread_id
+            label = thread_data["title"]
+            if is_current:
+                label = f"▶ {label}"
+            if st.button(label, key=thread_id, use_container_width=True):
+                st.session_state.current_thread_id = thread_id
+                st.rerun()
+
+    # 現在のスレッドがない場合は作成
+    if st.session_state.current_thread_id is None:
+        new_id = str(uuid.uuid4())
+        st.session_state.threads[new_id] = {"title": "新しい会話", "messages": []}
+        st.session_state.current_thread_id = new_id
+
+    # 現在のスレッドのメッセージを取得
+    current_thread = st.session_state.threads[st.session_state.current_thread_id]
+    messages = current_thread["messages"]
 
     # ヘッダー部分（ユーザー名とログアウトボタン）
     col1, col2 = st.columns([4, 1])
     with col1:
         st.title("なんでも検索エージェント")
-        username = authenticator.get_username()
         st.write(f"ようこそ、**{username}**さん！")
     with col2:
         if st.button("ログアウト"):
@@ -44,14 +109,14 @@ def main_app():
     st.write("Strands AgentsがMCPサーバーを使って情報収集します！")
 
     # 過去のチャット履歴を表示
-    for message in st.session_state.messages:
+    for message in messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
     # チャットボックスを描画
     if prompt := st.chat_input("メッセージを入力してね"):
         # ユーザーのプロンプトを履歴に追加
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "content": prompt})
 
         # ユーザーのプロンプトを表示
         with st.chat_message("user"):
@@ -68,7 +133,7 @@ def main_app():
                 agent_arn=st.secrets["AGENT_RUNTIME_ARN"],
                 prompt=prompt,
                 access_token=authenticator.get_credentials().access_token,
-                session_id=st.session_state.session_id,
+                session_id=st.session_state.current_thread_id,
                 actor_id=username,
                 gateway_url=st.secrets["GATEWAY_URL"],
                 region=st.secrets["AWS_DEFAULT_REGION"]
@@ -96,7 +161,13 @@ def main_app():
 
             # アシスタントの回答を履歴に追加
             if buffer:
-                st.session_state.messages.append({"role": "assistant", "content": buffer})
+                messages.append({"role": "assistant", "content": buffer})
+
+                # スレッドタイトルを最初のユーザーメッセージで更新
+                if current_thread["title"] == "新しい会話" and len(messages) >= 1:
+                    first_user_msg = next((m["content"] for m in messages if m["role"] == "user"), None)
+                    if first_user_msg:
+                        current_thread["title"] = first_user_msg[:20] + ("..." if len(first_user_msg) > 20 else "")
 
 # メイン処理を実行
 main_app()

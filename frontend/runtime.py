@@ -1,7 +1,8 @@
 import json
 import urllib.parse
-from typing import Generator
+from typing import Generator, List, Dict, Any
 import requests
+import boto3
 
 
 def invoke_agent_stream(
@@ -92,3 +93,65 @@ def invoke_agent_stream(
 
         except json.JSONDecodeError:
             continue
+
+
+def list_memory_sessions(
+    memory_id: str,
+    actor_id: str,
+    region: str = "us-east-1",
+    max_results: int = 50,
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None
+) -> List[Dict[str, Any]]:
+    """
+    AgentCore Memoryから指定アクターのセッション一覧を取得
+
+    Args:
+        memory_id: AgentCore MemoryのID
+        actor_id: アクターID（ユーザー識別子）
+        region: AWSリージョン
+        max_results: 最大取得件数
+        aws_access_key_id: AWSアクセスキーID（オプション）
+        aws_secret_access_key: AWSシークレットアクセスキー（オプション）
+
+    Returns:
+        List[Dict]: セッション一覧（sessionId, actorId, createdAt含む）
+    """
+    try:
+        # AWS認証情報が指定されている場合はそれを使用
+        if aws_access_key_id and aws_secret_access_key:
+            client = boto3.client(
+                'bedrock-agentcore',
+                region_name=region,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key
+            )
+        else:
+            client = boto3.client('bedrock-agentcore', region_name=region)
+
+        sessions = []
+        next_token = None
+
+        while True:
+            params = {
+                'memoryId': memory_id,
+                'actorId': actor_id,
+                'maxResults': max_results
+            }
+            if next_token:
+                params['nextToken'] = next_token
+
+            response = client.list_sessions(**params)
+
+            sessions.extend(response.get('sessionSummaries', []))
+
+            next_token = response.get('nextToken')
+            if not next_token:
+                break
+
+        return sessions
+
+    except Exception as e:
+        # エラーの場合は空のリストを返す（ローカル管理にフォールバック）
+        print(f"Warning: Failed to list sessions from AgentCore Memory: {e}")
+        return []
