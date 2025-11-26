@@ -27,6 +27,10 @@ def main_app():
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
 
+    # チャット履歴を初期化
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
     # ヘッダー部分（ユーザー名とログアウトボタン）
     col1, col2 = st.columns([4, 1])
     with col1:
@@ -39,8 +43,16 @@ def main_app():
 
     st.write("Strands AgentsがMCPサーバーを使って情報収集します！")
 
+    # 過去のチャット履歴を表示
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
     # チャットボックスを描画
     if prompt := st.chat_input("メッセージを入力してね"):
+        # ユーザーのプロンプトを履歴に追加
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
         # ユーザーのプロンプトを表示
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -81,6 +93,10 @@ def main_app():
 
             # 最後に残ったテキストを表示
             text_holder.markdown(buffer)
+
+            # アシスタントの回答を履歴に追加
+            if buffer:
+                st.session_state.messages.append({"role": "assistant", "content": buffer})
 
 # メイン処理を実行
 main_app()
