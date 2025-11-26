@@ -215,7 +215,7 @@ def list_session_events(
             if not next_token:
                 break
 
-        # イベントをメッセージ形式に変換
+        # イベントをメッセージ形式に変換（textのみ、toolUse/toolResultは除外）
         messages = []
         for event in events:
             payload = event.get('payload', [])
@@ -224,7 +224,25 @@ def list_session_events(
                     conv = item['conversational']
                     role_raw = conv.get('role', 'USER')
                     role = 'user' if role_raw == 'USER' else 'assistant'
-                    content = conv.get('content', {}).get('text', '')
+                    text_raw = conv.get('content', {}).get('text', '')
+
+                    # textがJSON文字列の場合、パースして実際のコンテンツを取得
+                    content = ''
+                    if text_raw:
+                        try:
+                            parsed = json.loads(text_raw)
+                            # message.content[0] の形式
+                            if 'message' in parsed and 'content' in parsed['message']:
+                                content_list = parsed['message']['content']
+                                if isinstance(content_list, list) and len(content_list) > 0:
+                                    first_content = content_list[0]
+                                    # textキーがある場合のみ（toolUse/toolResultは除外）
+                                    if 'text' in first_content:
+                                        content = first_content['text']
+                        except json.JSONDecodeError:
+                            # JSONでなければそのまま使用（プレーンテキスト）
+                            content = text_raw
+
                     if content:
                         messages.append({'role': role, 'content': content})
 

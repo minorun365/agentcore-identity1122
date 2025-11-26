@@ -114,11 +114,17 @@ def main_app():
                 st.session_state.current_thread_id = thread_id
                 st.rerun()
 
-    # 現在のスレッドがない場合は作成
+    # 現在のスレッドがない場合
     if st.session_state.current_thread_id is None:
-        new_id = str(uuid.uuid4())
-        st.session_state.threads[new_id] = {"title": "新しい会話", "messages": []}
-        st.session_state.current_thread_id = new_id
+        # 既存のスレッドがあれば最新のものを選択、なければ新規作成
+        if st.session_state.threads:
+            # スレッドIDでソートして最新を選択
+            latest_thread_id = sorted(st.session_state.threads.keys(), reverse=True)[0]
+            st.session_state.current_thread_id = latest_thread_id
+        else:
+            new_id = str(uuid.uuid4())
+            st.session_state.threads[new_id] = {"title": "新しい会話", "messages": []}
+            st.session_state.current_thread_id = new_id
 
     # 現在のスレッドのメッセージを取得
     current_thread = st.session_state.threads[st.session_state.current_thread_id]
