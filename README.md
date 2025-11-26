@@ -328,7 +328,7 @@ docker buildx build -f backend/Dockerfile .
 ```bash
 aws ecr get-login-password --region us-east-1 --profile sandbox | \
   docker login --username AWS --password-stdin \
-  715841358122.dkr.ecr.us-east-1.amazonaws.com
+  ************.dkr.ecr.us-east-1.amazonaws.com
 ```
 
 #### 3. ARM64 ビルドができない
